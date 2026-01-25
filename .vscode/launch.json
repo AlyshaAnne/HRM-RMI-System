@@ -3,6 +3,20 @@
     "configurations": [
         {
             "type": "java",
+            "name": "HRMClient",
+            "request": "launch",
+            "mainClass": "client.HRMClient",
+            "projectName": "HRM-RMI-System_375c39e7"
+        },
+        {
+            "type": "java",
+            "name": "HRMServer",
+            "request": "launch",
+            "mainClass": "server.HRMServer",
+            "projectName": "HRM-RMI-System_375c39e7"
+        },
+        {
+            "type": "java",
             "name": "Run JavaFX Client",
             "request": "launch",
             "mainClass": "client.Main",

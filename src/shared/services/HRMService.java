@@ -22,4 +22,9 @@ public interface HRMService extends Remote {
     MonthlyReportDTO generateMonthlyReport(int year, int month) throws RemoteException;
 
     YearlyReportDTO generateYearlyReport(int year) throws RemoteException;
+
+    // Admin / HR actions
+    boolean setAccountActive(String username, boolean active) throws RemoteException;
+
+    String submitPasswordResetRequest(String fullName, String employeeId) throws RemoteException;
 }

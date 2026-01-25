@@ -1,0 +1,3 @@
+username,password,role,active,fullName,employeeId
+admin,admin123,HR,true,HR Admin,HR001
+emp1,pass123,EMPLOYEE,true,John Tan,EMP001
