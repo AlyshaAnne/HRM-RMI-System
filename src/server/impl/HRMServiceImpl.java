@@ -1,5 +1,8 @@
 package server.impl;
 
+import shared.dto.ResetRequestDTO;
+import java.util.ArrayList;
+import java.util.List;
 import shared.services.HRMService;
 import shared.dto.LoginResultDTO;
 import shared.dto.MonthlyReportDTO;
@@ -7,23 +10,22 @@ import shared.dto.MonthlySalaryDTO;
 import shared.dto.YearlyReportDTO;
 import shared.models.Employee;
 
-import java.io.*;
-import java.nio.file.*;
+import server.DatabaseConnection;
+
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
+import java.sql.*;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
-
-    private static final String ACCOUNTS_PATH = "src/server/data/accounts.csv";
-    private static final String RESET_REQ_PATH = "src/server/data/reset_requests.csv";
 
     private static class Account {
         String username;
         String password;
         String role; // "HR" or "EMPLOYEE"
-        boolean active; // true/false
+        boolean active;
         String fullName;
         String employeeId;
 
@@ -41,78 +43,34 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
 
     public HRMServiceImpl() throws RemoteException {
         super();
-        loadAccountsFromCsv();
-        ensureResetRequestFileExists();
+        loadAccountsFromDb();
     }
 
-    private void loadAccountsFromCsv() throws RemoteException {
+    private void loadAccountsFromDb() throws RemoteException {
         accounts.clear();
 
-        Path path = Paths.get(ACCOUNTS_PATH);
-        if (!Files.exists(path)) {
-            throw new RemoteException("accounts.csv not found at: " + path.toAbsolutePath());
-        }
+        final String sql = """
+                    SELECT username, password, role, active, full_name, employee_id
+                    FROM accounts
+                """;
 
-        try (BufferedReader br = Files.newBufferedReader(path)) {
-            String header = br.readLine(); // skip header
-            if (header == null)
-                return;
+        try (Connection conn = DatabaseConnection.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
 
-            String line;
-            while ((line = br.readLine()) != null) {
-                if (line.trim().isEmpty())
-                    continue;
-
-                // username,password,role,active,fullName,employeeId
-                String[] parts = line.split(",", -1);
-                if (parts.length < 6)
-                    continue;
-
-                String username = parts[0].trim();
-                String password = parts[1].trim();
-                String role = parts[2].trim();
-                boolean active = Boolean.parseBoolean(parts[3].trim());
-                String fullName = parts[4].trim();
-                String employeeId = parts[5].trim();
+            while (rs.next()) {
+                String username = rs.getString("username");
+                String password = rs.getString("password");
+                String role = rs.getString("role");
+                boolean active = rs.getBoolean("active");
+                String fullName = rs.getString("full_name");
+                String employeeId = rs.getString("employee_id");
 
                 accounts.put(username, new Account(username, password, role, active, fullName, employeeId));
             }
-        } catch (IOException e) {
-            throw new RemoteException("Failed reading accounts.csv: " + e.getMessage(), e);
-        }
-    }
 
-    private void saveAccountsToCsv() throws RemoteException {
-        Path path = Paths.get(ACCOUNTS_PATH);
-
-        try (BufferedWriter bw = Files.newBufferedWriter(path)) {
-            bw.write("username,password,role,active,fullName,employeeId");
-            bw.newLine();
-
-            for (Account a : accounts.values()) {
-                bw.write(String.join(",",
-                        a.username,
-                        a.password,
-                        a.role,
-                        String.valueOf(a.active),
-                        a.fullName,
-                        a.employeeId));
-                bw.newLine();
-            }
-        } catch (IOException e) {
-            throw new RemoteException("Failed writing accounts.csv: " + e.getMessage(), e);
-        }
-    }
-
-    private void ensureResetRequestFileExists() throws RemoteException {
-        Path path = Paths.get(RESET_REQ_PATH);
-        try {
-            if (!Files.exists(path)) {
-                Files.createDirectories(path.getParent());
-                Files.writeString(path, "timestamp,fullName,employeeId,status\n", StandardOpenOption.CREATE);
-            }
-        } catch (IOException e) {
-            throw new RemoteException("Failed creating reset_requests.csv: " + e.getMessage(), e);
+        } catch (SQLException e) {
+            throw new RemoteException("Failed reading accounts from DB: " + e.getMessage(), e);
         }
     }
 
@@ -124,6 +82,9 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
 
         Account acc = accounts.get(username.trim());
         if (acc == null) {
+            // Optional: if you want “always latest”, you can reload here:
+            // loadAccountsFromDb();
+            // acc = accounts.get(username.trim());
             return new LoginResultDTO(false, null, "User not found");
         }
 
@@ -138,48 +99,86 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
         return new LoginResultDTO(true, acc.role, "Login successful");
     }
 
-    // Admin/HR: activate/deactivate
     @Override
     public boolean setAccountActive(String username, boolean active) throws RemoteException {
         if (username == null)
             return false;
 
-        Account acc = accounts.get(username.trim());
+        username = username.trim();
+        Account acc = accounts.get(username);
         if (acc == null)
             return false;
 
-        acc.active = active;
-        saveAccountsToCsv();
-        return true;
+        final String sql = "UPDATE accounts SET active = ? WHERE username = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setBoolean(1, active);
+            ps.setString(2, username);
+
+            int updated = ps.executeUpdate();
+            if (updated == 1) {
+                acc.active = active; // keep cache in sync
+                return true;
+            }
+            return false;
+
+        } catch (SQLException e) {
+            throw new RemoteException("Failed updating account active in DB: " + e.getMessage(), e);
+        }
     }
 
-    // User: submits a request, admin handles later
     @Override
     public String submitPasswordResetRequest(String fullName, String employeeId) throws RemoteException {
         if (fullName == null || employeeId == null || fullName.trim().isEmpty() || employeeId.trim().isEmpty()) {
             return "Full name and employee ID are required.";
         }
 
-        // Optional: verify employeeId exists in accounts
-        boolean exists = accounts.values().stream()
-                .anyMatch(a -> a.employeeId.equalsIgnoreCase(employeeId.trim()) &&
-                        a.fullName.equalsIgnoreCase(fullName.trim()));
+        String fullNameTrim = fullName.trim();
+        String employeeIdTrim = employeeId.trim();
 
-        if (!exists) {
-            return "No matching employee found. Please check your details.";
-        }
+        // Verify employee exists (DB check, not CSV)
+        final String existsSql = """
+                    SELECT 1
+                    FROM accounts
+                    WHERE LOWER(employee_id) = LOWER(?)
+                      AND LOWER(full_name) = LOWER(?)
+                    LIMIT 1
+                """;
 
-        String row = String.join(",",
-                LocalDateTime.now().toString(),
-                fullName.trim().replace(",", " "),
-                employeeId.trim().replace(",", " "),
-                "PENDING");
+        final String insertSql = """
+                    INSERT INTO reset_requests (request_time, full_name, employee_id, status)
+                    VALUES (?, ?, ?, ?)
+                """;
 
-        try {
-            Files.writeString(Paths.get(RESET_REQ_PATH), row + "\n", StandardOpenOption.APPEND);
+        try (Connection conn = DatabaseConnection.getConnection()) {
+
+            // 1) check exists
+            try (PreparedStatement ps = conn.prepareStatement(existsSql)) {
+                ps.setString(1, employeeIdTrim);
+                ps.setString(2, fullNameTrim);
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        return "No matching employee found. Please check your details.";
+                    }
+                }
+            }
+
+            // 2) insert reset request
+            try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+                ps.setTimestamp(1, Timestamp.valueOf(LocalDateTime.now()));
+                ps.setString(2, fullNameTrim);
+                ps.setString(3, employeeIdTrim);
+                ps.setString(4, "PENDING");
+                ps.executeUpdate();
+            }
+
             return "Reset request submitted. HR/Admin will process it.";
-        } catch (IOException e) {
-            throw new RemoteException("Failed saving reset request: " + e.getMessage(), e);
+
+        } catch (SQLException e) {
+            throw new RemoteException("Failed saving reset request in DB: " + e.getMessage(), e);
         }
     }
 
@@ -209,4 +208,60 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
     public YearlyReportDTO generateYearlyReport(int year) throws RemoteException {
         throw new UnsupportedOperationException("Not implemented yet");
     }
+
+    @Override
+    public List<ResetRequestDTO> getResetRequests() throws RemoteException {
+        final String sql = """
+                SELECT request_id, request_time, full_name, employee_id, status
+                FROM reset_requests
+                ORDER BY request_id DESC
+                """;
+
+        List<ResetRequestDTO> list = new ArrayList<>();
+
+        try (Connection conn = DatabaseConnection.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                list.add(new ResetRequestDTO(
+                        rs.getInt("request_id"),
+                        rs.getTimestamp("request_time"),
+                        rs.getString("full_name"),
+                        rs.getString("employee_id"),
+                        rs.getString("status")));
+            }
+
+            return list;
+
+        } catch (SQLException e) {
+            throw new RemoteException("Failed reading reset requests from DB: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public boolean updateResetRequestStatus(int requestId, String newStatus) throws RemoteException {
+        if (newStatus == null)
+            return false;
+
+        String status = newStatus.trim().toUpperCase();
+        if (!(status.equals("PENDING") || status.equals("APPROVED") || status.equals("REJECTED"))) {
+            return false;
+        }
+
+        final String sql = "UPDATE reset_requests SET status = ? WHERE request_id = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, status);
+            ps.setInt(2, requestId);
+
+            return ps.executeUpdate() == 1;
+
+        } catch (SQLException e) {
+            throw new RemoteException("Failed updating reset request status in DB: " + e.getMessage(), e);
+        }
+    }
+
 }

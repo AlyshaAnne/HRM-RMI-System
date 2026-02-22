@@ -1,5 +1,7 @@
 package shared.services;
 
+import java.util.List;
+import shared.dto.ResetRequestDTO;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 
@@ -27,4 +29,10 @@ public interface HRMService extends Remote {
     boolean setAccountActive(String username, boolean active) throws RemoteException;
 
     String submitPasswordResetRequest(String fullName, String employeeId) throws RemoteException;
+
+    // HR: view & manage password reset requests
+    List<ResetRequestDTO> getResetRequests() throws RemoteException;
+
+    boolean updateResetRequestStatus(int requestId, String newStatus) throws RemoteException;
+
 }
