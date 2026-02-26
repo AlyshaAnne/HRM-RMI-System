@@ -1,11 +1,14 @@
 package client.ui.hr;
 
+import javafx.stage.Stage;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+
+import client.ui.hr.LoginView;
 
 import shared.dto.ResetRequestDTO;
 import shared.services.HRMService;
@@ -20,7 +23,7 @@ public class ResetRequestsView extends BorderPane {
     private final TableView<ResetRequestDTO> table = new TableView<>();
     private final ObservableList<ResetRequestDTO> data = FXCollections.observableArrayList();
 
-    public ResetRequestsView(HRMService service) {
+    public ResetRequestsView(Stage stage, HRMService service) {
         this.service = service;
 
         setPadding(new Insets(15));
@@ -52,7 +55,7 @@ public class ResetRequestsView extends BorderPane {
                 cell -> new javafx.beans.property.SimpleStringProperty(cell.getValue().getStatus()));
         colStatus.setPrefWidth(120);
 
-        table.getColumns().addAll(colId, colTime, colName, colEmpId, colStatus);
+        table.getColumns().setAll(java.util.List.of(colId, colTime, colName, colEmpId, colStatus));
         table.setItems(data);
 
         setCenter(table);
@@ -61,13 +64,16 @@ public class ResetRequestsView extends BorderPane {
         Button btnRefresh = new Button("Refresh");
         Button btnApprove = new Button("Approve");
         Button btnReject = new Button("Reject");
+        Button btnBack = new Button("Back");
 
         btnRefresh.setOnAction(e -> loadRequests());
 
         btnApprove.setOnAction(e -> updateSelected("APPROVED"));
         btnReject.setOnAction(e -> updateSelected("REJECTED"));
 
-        HBox actions = new HBox(10, btnRefresh, btnApprove, btnReject);
+        btnBack.setOnAction(e -> stage.setScene(LoginView.create(stage, service)));
+
+        HBox actions = new HBox(10, btnBack, btnRefresh, btnApprove, btnReject);
         actions.setPadding(new Insets(10, 0, 0, 0));
         setBottom(actions);
 

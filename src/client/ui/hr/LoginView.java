@@ -164,7 +164,7 @@ public class LoginView {
         resetRequestsBtn.setOnAction(e -> {
             // If your ResetRequestsView returns a Scene, use that.
             // If it returns a Node/Pane, wrap it in a new Scene.
-            stage.setScene(new Scene(new ResetRequestsView(service), 900, 600));
+            stage.setScene(new Scene(new ResetRequestsView(stage, service), 900, 600));
         });
 
         Button logoutBtn = new Button("Logout");
