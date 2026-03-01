@@ -1,4 +1,5 @@
 package client.ui.Employee;
+
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
@@ -9,61 +10,103 @@ import javafx.stage.Stage;
 import shared.dto.LoginResultDTO;
 import shared.models.Employee;
 import shared.services.HRMService;
+
 import java.rmi.RemoteException;
+
 /*
  * PSEUDOCODE for ProfileView:
  * 
- * PURPOSE: Allow employee to view and update their PERSONAL INFORMATION only
+ * PURPOSE: Allow employee to view and update their personal profile
+ * 
+ * WORKFLOW:
+ * 1. Load employee data from database using employeeId
+ * 2. Display data in editable form fields
+ * 3. Allow user to modify fields
+ * 4. Validate input
+ * 5. Save changes back to database
+ * 
+ * DATABASE INTERACTION:
+ * - READ: service.getEmployeeProfile(employeeId) → Employee object
+ * - WRITE: service.updateEmployeeProfile(employee) → boolean success
  * 
  * FUNCTION create(stage, service, loginResult)
- *     1. CREATE UI components:
- *        - Title label
- *        - Form fields for personal data (name, email, phone, address)
- *        - Save and Back buttons
- *     
- *     2. LOAD existing employee data from server
- *        - Call service.getEmployeeProfile(employeeId)
- *        - Populate form fields with retrieved data
- *     
- *     3. ATTACH event handlers:
- *        - Save button: Validate and update employee profile
- *        - Back button: Return to dashboard
- *     
- *     4. RETURN Scene
+ *     1. CREATE UI components (form fields)
+ *     2. LOAD existing employee data from database
+ *     3. POPULATE form fields with data
+ *     4. ATTACH save and back button handlers
+ *     5. RETURN Scene
  * END FUNCTION
  */
 public class ProfileView {
+
     public static Scene create(Stage stage, HRMService service, LoginResultDTO loginResult) {
-        // STEP 1: Create title
+
+        /*
+         * STEP 1: Create title and subtitle
+         */
         Label title = new Label("Personal Profile");
         title.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
+
         Label subtitle = new Label("Update your personal information");
         subtitle.setStyle("-fx-font-size: 12px; -fx-text-fill: gray;");
-        // STEP 2: Create form fields
+
+        /*
+         * STEP 2: Create form fields
+         * 
+         * PSEUDOCODE:
+         * - Create TextField for each editable field
+         * - Mark read-only fields (IC, Department, Position)
+         * - Use TextArea for multi-line address
+         */
+        
+        // Editable fields
         Label fnameLabel = new Label("First Name:*");
         TextField fnameField = new TextField();
+        fnameField.setPromptText("Enter first name");
+
         Label lnameLabel = new Label("Last Name:*");
         TextField lnameField = new TextField();
-        Label icLabel = new Label("IC / Passport No:");
-        TextField icField = new TextField();
-        icField.setEditable(false); // IC cannot be changed by employee
-        icField.setStyle("-fx-background-color: #e0e0e0;");
+        lnameField.setPromptText("Enter last name");
+
         Label emailLabel = new Label("Email:*");
         TextField emailField = new TextField();
+        emailField.setPromptText("Enter email address");
+
         Label phoneLabel = new Label("Phone Number:");
         TextField phoneField = new TextField();
+        phoneField.setPromptText("e.g., 012-3456789");
+
         Label addressLabel = new Label("Address:");
         TextArea addressArea = new TextArea();
         addressArea.setPrefRowCount(3);
+        addressArea.setPromptText("Enter home address");
+        addressArea.setWrapText(true);
+
+        // Read-only fields (cannot be edited by employee)
+        Label icLabel = new Label("IC / Passport No:");
+        TextField icField = new TextField();
+        icField.setEditable(false);
+        icField.setStyle("-fx-background-color: #e0e0e0;");
+
         Label departmentLabel = new Label("Department:");
         TextField departmentField = new TextField();
-        departmentField.setEditable(false); // Department cannot be changed by employee
+        departmentField.setEditable(false);
         departmentField.setStyle("-fx-background-color: #e0e0e0;");
+
         Label positionLabel = new Label("Position:");
         TextField positionField = new TextField();
-        positionField.setEditable(false); // Position cannot be changed by employee
+        positionField.setEditable(false);
         positionField.setStyle("-fx-background-color: #e0e0e0;");
-        // STEP 3: Arrange form in grid layout
+
+        /*
+         * STEP 3: Arrange form in grid layout
+         * 
+         * PSEUDOCODE:
+         * - Use GridPane for label-field pairs
+         * - Column 0: Labels
+         * - Column 1: Input fields
+         * - Set gaps for spacing
+         */
         GridPane form = new GridPane();
         form.setVgap(12);
         form.setHgap(10);
@@ -75,13 +118,32 @@ public class ProfileView {
         form.add(addressLabel, 0, 5);    form.add(addressArea, 1, 5);
         form.add(departmentLabel, 0, 6); form.add(departmentField, 1, 6);
         form.add(positionLabel, 0, 7);   form.add(positionField, 1, 7);
-        // STEP 4: Create buttons
+
+        // Make form fields expand to fill space
+        fnameField.setPrefWidth(300);
+        lnameField.setPrefWidth(300);
+        emailField.setPrefWidth(300);
+        phoneField.setPrefWidth(300);
+        addressArea.setPrefWidth(300);
+        icField.setPrefWidth(300);
+        departmentField.setPrefWidth(300);
+        positionField.setPrefWidth(300);
+
+        /*
+         * STEP 4: Create action buttons
+         */
         Button saveBtn = new Button("Save Changes");
-        saveBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
+        saveBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8px 20px;");
+
         Button backBtn = new Button("Back to Dashboard");
+        backBtn.setStyle("-fx-padding: 8px 20px;");
+
         HBox buttonRow = new HBox(15, saveBtn, backBtn);
         buttonRow.setAlignment(javafx.geometry.Pos.CENTER);
-        // STEP 5: Arrange all components
+
+        /*
+         * STEP 5: Arrange all components
+         */
         VBox root = new VBox(15, 
             title, 
             subtitle,
@@ -91,111 +153,268 @@ public class ProfileView {
             buttonRow
         );
         root.setPadding(new Insets(25));
+
         // -----------------------------
         // STEP 6: LOAD EXISTING DATA
         // -----------------------------
         /*
-         * PSEUDOCODE - loadEmployeeData():
-         * TRY:
-         *     1. Call RMI: employee = service.getEmployeeProfile(employeeId)
-         *     2. IF employee exists THEN
-         *        - Populate ALL form fields with employee data
-         * CATCH RemoteException:
-         *     - Show error alert
+         * PSEUDOCODE - Load Employee Data:
+         * 
+         * WHEN view is created:
+         * 1. GET employeeId from loginResult
+         * 2. CALL service.getEmployeeProfile(employeeId)
+         * 3. IF employee found THEN
+         *    - Populate all form fields with employee data
+         * 4. ELSE
+         *    - Show error message
+         *    - Disable save button
          */
-        // try {
-        //     Employee employee = service.getEmployeeProfile(loginResult.getEmployeeId());
-        //     if (employee != null) {
-        //         fnameField.setText(employee.getFirstName());
-        //         lnameField.setText(employee.getLastName());
-        //         icField.setText(employee.getIcPassport());
-        //         emailField.setText(employee.getEmail());
-        //         phoneField.setText(employee.getPhone());
-        //         addressArea.setText(employee.getAddress());
-        //         departmentField.setText(employee.getDepartment());
-        //         positionField.setText(employee.getPosition());
-        //     }
-        // } catch (RemoteException ex) {
-        //     showAlert(Alert.AlertType.ERROR, "Error", "Failed to load profile: " + ex.getMessage());
-        // }
+        loadEmployeeData(service, loginResult.getEmployeeId(), 
+                        fnameField, lnameField, icField, emailField, 
+                        phoneField, addressArea, departmentField, positionField);
+
         // -----------------------------
         // STEP 7: EVENT HANDLERS
         // -----------------------------
+
         /*
          * PSEUDOCODE - Back Button:
-         * When clicked → Return to EmployeeDashboardView
+         * 
+         * When clicked:
+         * 1. Return to EmployeeDashboardView
+         * 2. PASS same stage, service, loginResult
          */
         backBtn.setOnAction(e -> {
             stage.setScene(EmployeeDashboardView.create(stage, service, loginResult));
         });
+
         /*
          * PSEUDOCODE - Save Button:
-         * 1. VALIDATE required fields (firstName, lastName, email)
-         *    - IF any required field is empty THEN
-         *      - Show warning alert
-         *      - EXIT
          * 
-         * 2. TRY:
-         *    a. Get current employee: employee = service.getEmployeeProfile(employeeId)
-         *    b. UPDATE employee object with form values
-         *    c. Call RMI: success = service.updateEmployeeProfile(employee)
-         *    d. IF success THEN
-         *       - Show success alert
-         *       ELSE
-         *       - Show error alert
-         * 
-         * 3. CATCH RemoteException:
-         *    - Show error alert
+         * When clicked:
+         * 1. VALIDATE all required fields
+         * 2. IF validation fails THEN
+         *    - Show error message
+         *    - EXIT
+         * 3. GET current employee object from database
+         * 4. UPDATE employee object with form values
+         * 5. CALL service.updateEmployeeProfile(employee)
+         * 6. IF successful THEN
+         *    - Show success message
+         * 7. ELSE
+         *    - Show error message
          */
-        // saveBtn.setOnAction(e -> {
-        //     // Validate required fields
-        //     if (fnameField.getText().trim().isEmpty() || 
-        //         lnameField.getText().trim().isEmpty() ||
-        //         emailField.getText().trim().isEmpty()) {
-        //         showAlert(Alert.AlertType.WARNING, "Validation Error", 
-        //                  "First Name, Last Name, and Email are required fields.");
-        //         return;
-        //     }
-        //     // Email validation (simple check)
-        //     if (!emailField.getText().contains("@")) {
-        //         showAlert(Alert.AlertType.WARNING, "Validation Error", 
-        //                  "Please enter a valid email address.");
-        //         return;
-        //     }
-            //try {
-                // Get current employee object
-               // Employee employee = service.getEmployeeProfile(loginResult.getEmployeeId());
-                
-                // Update with form values
-                // employee.setFirstName(fnameField.getText().trim());
-                // employee.setLastName(lnameField.getText().trim());
-                // employee.setEmail(emailField.getText().trim());
-                // employee.setPhone(phoneField.getText().trim());
-               // employee.setAddress(addressArea.getText().trim());
-                // Note: IC, Department, Position are NOT updated (not editable by employee)
-                // Save to database via RMI
-              //  boolean success = service.updateEmployeeProfile(employee);
-                
-        //         if (success) {
-        //             showAlert(Alert.AlertType.INFORMATION, "Success", 
-        //                      "Your profile has been updated successfully!");
-        //         } else {
-        //             showAlert(Alert.AlertType.ERROR, "Error", 
-        //                      "Failed to update profile. Please try again.");
-        //         }
-        //     } catch (RemoteException ex) {
-        //         showAlert(Alert.AlertType.ERROR, "Error", 
-        //                  "Failed to save profile: " + ex.getMessage());
-        //     }
-        // });
+        saveBtn.setOnAction(e -> {
+            saveProfile(service, loginResult.getEmployeeId(),
+                       fnameField, lnameField, emailField, phoneField, addressArea);
+        });
+
         // STEP 8: Return scene
-        return new Scene(root, 600, 650);
+        return new Scene(root, 650, 700);
     }
+
+    // ==========================================
+    // HELPER METHODS
+    // ==========================================
+
+    /*
+     * PSEUDOCODE - loadEmployeeData():
+     * 
+     * PURPOSE: Load employee data from database and populate form
+     * 
+     * FUNCTION loadEmployeeData(service, employeeId, form_fields...)
+     *     TRY:
+     *         1. CALL RMI: employee = service.getEmployeeProfile(employeeId)
+     *         
+     *         2. IF employee is null THEN
+     *            - Show error: "Employee data not found"
+     *            - RETURN
+     *         
+     *         3. POPULATE form fields:
+     *            - fnameField = employee.firstName
+     *            - lnameField = employee.lastName
+     *            - icField = employee.icPassport
+     *            - emailField = employee.email
+     *            - phoneField = employee.phone
+     *            - addressArea = employee.address
+     *            - departmentField = employee.department
+     *            - positionField = employee.position
+     *     
+     *     CATCH RemoteException:
+     *         - Show error alert with exception message
+     *         - Log error for debugging
+     * END FUNCTION
+     */
+    private static void loadEmployeeData(HRMService service, String employeeId,
+                                        TextField fnameField, TextField lnameField, 
+                                        TextField icField, TextField emailField,
+                                        TextField phoneField, TextArea addressArea,
+                                        TextField departmentField, TextField positionField) {
+        try {
+            // Make RMI call to get employee profile
+            Employee employee = service.getEmployeeProfile(employeeId);
+            
+            if (employee == null) {
+                showAlert(Alert.AlertType.ERROR, "Error", 
+                         "Employee data not found in database. Please contact HR.");
+                return;
+            }
+
+            // Populate form fields with employee data
+            fnameField.setText(safeString(employee.getFirstName()));
+            lnameField.setText(safeString(employee.getLastName()));
+            icField.setText(safeString(employee.getIcPassport()));
+            emailField.setText(safeString(employee.getEmail()));
+            phoneField.setText(safeString(employee.getPhone()));
+            addressArea.setText(safeString(employee.getAddress()));
+            departmentField.setText(safeString(employee.getDepartment()));
+            positionField.setText(safeString(employee.getPosition()));
+            
+        } catch (RemoteException ex) {
+            // Handle network/RMI errors
+            showAlert(Alert.AlertType.ERROR, "Connection Error", 
+                     "Failed to load employee data: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+    }
+
+    /*
+     * PSEUDOCODE - saveProfile():
+     * 
+     * PURPOSE: Validate input and save changes to database
+     * 
+     * FUNCTION saveProfile(service, employeeId, form_fields...)
+     *     1. VALIDATE required fields:
+     *        - firstName must not be empty
+     *        - lastName must not be empty
+     *        - email must not be empty
+     *        - email must contain '@'
+     *        IF validation fails THEN
+     *          - Show warning alert
+     *          - EXIT function
+     *     
+     *     2. TRY:
+     *        a. GET current employee: employee = service.getEmployeeProfile(employeeId)
+     *        
+     *        b. IF employee is null THEN
+     *           - Show error: "Cannot find employee record"
+     *           - EXIT
+     *        
+     *        c. UPDATE employee object with form values:
+     *           - employee.firstName = fnameField.text
+     *           - employee.lastName = lnameField.text
+     *           - employee.email = emailField.text
+     *           - employee.phone = phoneField.text
+     *           - employee.address = addressArea.text
+     *           NOTE: Do NOT update IC, department, position (read-only)
+     *        
+     *        d. CALL RMI: success = service.updateEmployeeProfile(employee)
+     *        
+     *        e. IF success THEN
+     *           - Show success alert: "Profile updated successfully!"
+     *           ELSE
+     *           - Show error alert: "Failed to update profile"
+     *     
+     *     3. CATCH RemoteException:
+     *        - Show error alert with exception message
+     * END FUNCTION
+     */
+    private static void saveProfile(HRMService service, String employeeId,
+                                   TextField fnameField, TextField lnameField,
+                                   TextField emailField, TextField phoneField,
+                                   TextArea addressArea) {
+        try {
+            // STEP 1: Validate required fields
+            String firstName = fnameField.getText().trim();
+            String lastName = lnameField.getText().trim();
+            String email = emailField.getText().trim();
+
+            if (firstName.isEmpty() || lastName.isEmpty()) {
+                showAlert(Alert.AlertType.WARNING, "Validation Error", 
+                         "First Name and Last Name are required fields.");
+                return;
+            }
+
+            if (email.isEmpty()) {
+                showAlert(Alert.AlertType.WARNING, "Validation Error", 
+                         "Email is required.");
+                return;
+            }
+
+            // Simple email validation
+            if (!email.contains("@") || !email.contains(".")) {
+                showAlert(Alert.AlertType.WARNING, "Validation Error", 
+                         "Please enter a valid email address (e.g., name@company.com).");
+                return;
+            }
+
+            // STEP 2: Get current employee object from database
+            Employee employee = service.getEmployeeProfile(employeeId);
+            
+            if (employee == null) {
+                showAlert(Alert.AlertType.ERROR, "Error", 
+                         "Cannot find employee record. Please contact HR.");
+                return;
+            }
+
+            // STEP 3: Update employee object with form values
+            employee.setFirstName(firstName);
+            employee.setLastName(lastName);
+            employee.setEmail(email);
+            employee.setPhone(phoneField.getText().trim());
+            employee.setAddress(addressArea.getText().trim());
+            
+            // Note: IC, Department, Position are NOT updated (read-only for employees)
+
+            // STEP 4: Save to database via RMI
+            boolean success = service.updateEmployeeProfile(employee);
+            
+            // STEP 5: Show result to user
+            if (success) {
+                showAlert(Alert.AlertType.INFORMATION, "Success", 
+                         "✅ Your profile has been updated successfully!");
+            } else {
+                showAlert(Alert.AlertType.ERROR, "Error", 
+                         "❌ Failed to update profile. Please try again or contact HR.");
+            }
+            
+        } catch (RemoteException ex) {
+            // Handle network/RMI errors
+            showAlert(Alert.AlertType.ERROR, "Connection Error", 
+                     "Failed to save profile: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+    }
+
+    /*
+     * PSEUDOCODE - safeString():
+     * 
+     * PURPOSE: Convert null values to empty strings for display
+     * 
+     * FUNCTION safeString(s)
+     *     IF s is null THEN
+     *         RETURN empty string ""
+     *     ELSE
+     *         RETURN s
+     * END FUNCTION
+     * 
+     * WHY: TextField.setText(null) can cause issues
+     */
+    private static String safeString(String s) {
+        return s == null ? "" : s;
+    }
+
     /*
      * PSEUDOCODE - showAlert():
-     * 1. CREATE alert dialog with specified type
-     * 2. SET title and content
-     * 3. SHOW and WAIT for user to close
+     * 
+     * PURPOSE: Display alert dialog to user
+     * 
+     * FUNCTION showAlert(type, title, content)
+     *     1. CREATE Alert with specified type (INFO, WARNING, ERROR)
+     *     2. SET title
+     *     3. SET content message
+     *     4. SHOW alert and WAIT for user to close it
+     * END FUNCTION
      */
     private static void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);

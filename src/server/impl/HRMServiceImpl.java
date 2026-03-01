@@ -100,7 +100,98 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
     acc.fullName);
     
     }
-    
+    /*
+     * PSEUDOCODE - getEmployeeProfile():
+     * 
+     * FUNCTION getEmployeeProfile(employeeId)
+     *     1. QUERY employees table WHERE employee_id = employeeId
+     *     2. IF found THEN
+     *        CREATE Employee object
+     *        RETURN Employee
+     *     3. ELSE
+     *        RETURN null
+     * END FUNCTION
+     * 
+     * NOTE: employeeId is String (e.g., "EMP001"), not int!
+     */
+    @Override
+    public Employee getEmployeeProfile(String employeeId) throws RemoteException {
+        final String sql = """
+            SELECT id, employee_id, first_name, last_name, ic_passport, 
+                   email, phone, address, department, position
+            FROM employees
+            WHERE employee_id = ?
+        """;
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, employeeId);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                Employee emp = new Employee();
+                emp.setId(rs.getInt("id"));
+                emp.setEmployeeId(rs.getString("employee_id"));
+                emp.setFirstName(rs.getString("first_name"));
+                emp.setLastName(rs.getString("last_name"));
+                emp.setIcPassport(rs.getString("ic_passport"));
+                emp.setEmail(rs.getString("email"));
+                emp.setPhone(rs.getString("phone"));
+                emp.setAddress(rs.getString("address"));
+                emp.setDepartment(rs.getString("department"));
+                emp.setPosition(rs.getString("position"));
+                
+                return emp;
+            }
+
+            return null;
+
+        } catch (SQLException e) {
+    System.err.println("DB ERROR in getEmployeeProfile");
+    e.printStackTrace();  
+    throw new RemoteException("Failed to get employee profile", e);
+}
+    }
+      /*
+     * PSEUDOCODE - updateEmployeeProfile():
+     * 
+     * FUNCTION updateEmployeeProfile(employee)
+     *     1. VALIDATE employee object
+     *     2. UPDATE employees table
+     *     3. RETURN success/failure
+     * END FUNCTION
+     */
+    @Override
+    public boolean updateEmployeeProfile(Employee employee) throws RemoteException {
+        if (employee == null || employee.getEmployeeId() == null) {
+            return false;
+        }
+
+        final String sql = """
+            UPDATE employees 
+            SET first_name = ?, last_name = ?, email = ?, 
+                phone = ?, address = ?
+            WHERE employee_id = ?
+        """;
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, employee.getFirstName());
+            ps.setString(2, employee.getLastName());
+            ps.setString(3, employee.getEmail());
+            ps.setString(4, employee.getPhone());
+            ps.setString(5, employee.getAddress());
+            ps.setString(6, employee.getEmployeeId());
+
+            int rowsAffected = ps.executeUpdate();
+            return rowsAffected > 0;
+
+        } catch (SQLException e) {
+            throw new RemoteException("Failed to update employee profile: " + e.getMessage(), e);
+        }
+    }
 
     @Override
     public boolean setAccountActive(String username, boolean active) throws RemoteException {

@@ -35,4 +35,7 @@ public interface HRMService extends Remote {
 
     boolean updateResetRequestStatus(int requestId, String newStatus) throws RemoteException;
 
+    Employee getEmployeeProfile(String employeeId) throws RemoteException;
+    boolean updateEmployeeProfile(Employee employee) throws RemoteException;
+
 }
