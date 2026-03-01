@@ -68,7 +68,7 @@ public class LoginView {
                     if ("HR".equalsIgnoreCase(role) || "ADMIN".equalsIgnoreCase(role)) {
                         stage.setScene(makeHRDashboardScene(stage, service, role));
                     } else {
-                        stage.setScene(makeEmployeeDashboardScene(stage, service, role));
+                        stage.setScene(makeEmployeeDashboardScene(stage, service, result));
                     }
                 } else {
                     statusLabel.setText(result == null ? "Login failed." : safe(result.getMessage()));
@@ -177,17 +177,7 @@ public class LoginView {
         return new Scene(root, 600, 400);
     }
 
-    private static Scene makeEmployeeDashboardScene(Stage stage, HRMService service, String role) {
-
-        Label title = new Label("Employee Dashboard (placeholder)");
-        Label roleLabel = new Label("Role: " + role);
-
-        Button logoutBtn = new Button("Logout");
-        logoutBtn.setOnAction(e -> stage.setScene(LoginView.create(stage, service)));
-
-        VBox root = new VBox(12, title, roleLabel, logoutBtn);
-        root.setPadding(new Insets(20));
-
-        return new Scene(root, 600, 400);
-    }
+private static Scene makeEmployeeDashboardScene(Stage stage, HRMService service, LoginResultDTO loginResult) {
+    return client.ui.Employee.EmployeeDashboardView.create(stage, service, loginResult);
+}
 }

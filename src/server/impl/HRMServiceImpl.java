@@ -96,8 +96,11 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
             return new LoginResultDTO(false, null, "Invalid password");
         }
 
-        return new LoginResultDTO(true, acc.role, "Login successful");
+        return new LoginResultDTO(true, acc.role, "Login successful", acc.employeeId,
+    acc.fullName);
+    
     }
+    
 
     @Override
     public boolean setAccountActive(String username, boolean active) throws RemoteException {
