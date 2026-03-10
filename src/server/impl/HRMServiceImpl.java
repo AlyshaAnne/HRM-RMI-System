@@ -9,6 +9,7 @@ import shared.dto.MonthlyReportDTO;
 import shared.dto.MonthlySalaryDTO;
 import shared.dto.YearlyReportDTO;
 import shared.models.Employee;
+import shared.models.FamilyMember;
 
 import server.DatabaseConnection;
 
@@ -19,12 +20,47 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
+/*
+ * PSEUDOCODE for HRMServiceImpl:
+ * 
+ * PURPOSE: Server-side implementation of all HRM system operations
+ * 
+ * ARCHITECTURE:
+ * - Extends UnicastRemoteObject for RMI support
+ * - Implements HRMService interface
+ * - Manages database connections via DatabaseConnection class
+ * - Handles all business logic and data validation
+ * 
+ * MAIN COMPONENTS:
+ * 1. Account Management (login, activation)
+ * 2. Employee Profile Management (view, update)
+ * 3. Family Details Management (CRUD operations)
+ * 4. Password Reset Management
+ * 5. Reports & Salary (stub methods)
+ */
 public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
 
+    // ==========================================
+    // INNER CLASS: Account Cache
+    // ==========================================
+    
+    /*
+     * PSEUDOCODE - Account Inner Class:
+     * 
+     * PURPOSE: In-memory cache of account data for fast login validation
+     * 
+     * FIELDS:
+     * - username: Login username
+     * - password: Plain text password (should be hashed in production)
+     * - role: HR, ADMIN, or EMPLOYEE
+     * - active: Whether account is enabled
+     * - fullName: Employee's full name
+     * - employeeId: Business ID like "EMP001"
+     */
     private static class Account {
         String username;
         String password;
-        String role; // "HR" or "EMPLOYEE"
+        String role;
         boolean active;
         String fullName;
         String employeeId;
@@ -39,13 +75,52 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
         }
     }
 
+    // ==========================================
+    // INSTANCE VARIABLES
+    // ==========================================
+    
     private final Map<String, Account> accounts = new HashMap<>();
 
+    // ==========================================
+    // CONSTRUCTOR
+    // ==========================================
+    
+    /*
+     * PSEUDOCODE - Constructor:
+     * 
+     * FUNCTION HRMServiceImpl()
+     *     1. CALL super() to initialize UnicastRemoteObject
+     *     2. CALL loadAccountsFromDb() to populate account cache
+     * END FUNCTION
+     */
     public HRMServiceImpl() throws RemoteException {
         super();
         loadAccountsFromDb();
     }
 
+    // ==========================================
+    // ACCOUNT CACHE MANAGEMENT
+    // ==========================================
+    
+    /*
+     * PSEUDOCODE - loadAccountsFromDb():
+     * 
+     * PURPOSE: Load all accounts from database into memory cache
+     * 
+     * FUNCTION loadAccountsFromDb()
+     *     1. CLEAR existing accounts map
+     *     2. PREPARE SQL query: SELECT all from accounts table
+     *     3. CONNECT to database
+     *     4. EXECUTE query
+     *     5. FOR each row in ResultSet:
+     *        a. CREATE Account object with row data
+     *        b. PUT into accounts map with username as key
+     *     6. CLOSE resources
+     * 
+     * CATCH SQLException:
+     *     THROW RemoteException
+     * END FUNCTION
+     */
     private void loadAccountsFromDb() throws RemoteException {
         accounts.clear();
 
@@ -74,45 +149,85 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
         }
     }
 
+    // ==========================================
+    // AUTHENTICATION METHODS
+    // ==========================================
+    
+    /*
+     * PSEUDOCODE - login():
+     * 
+     * PURPOSE: Authenticate user and return login result
+     * 
+     * FUNCTION login(username, password)
+     *     1. VALIDATE inputs (not null)
+     *     2. GET account from cache using username
+     *     3. IF account not found THEN
+     *        - RETURN failure DTO with "User not found" message
+     *     4. IF account is not active THEN
+     *        - RETURN failure DTO with "Account deactivated" message
+     *     5. IF password doesn't match THEN
+     *        - RETURN failure DTO with "Invalid password" message
+     *     6. ELSE
+     *        - RETURN success DTO with employee details (id, name, role)
+     * END FUNCTION
+     */
     @Override
     public LoginResultDTO login(String username, String password) throws RemoteException {
+        // Validation
         if (username == null || password == null) {
             return new LoginResultDTO(false, null, "Username/password cannot be null");
         }
 
+        // Get account from cache
         Account acc = accounts.get(username.trim());
+        
+        // Check if account exists
         if (acc == null) {
-            // Optional: if you want “always latest”, you can reload here:
+            // Optional: Reload from database for latest data
             // loadAccountsFromDb();
             // acc = accounts.get(username.trim());
             return new LoginResultDTO(false, null, "User not found");
         }
 
+        // Check if account is active
         if (!acc.active) {
             return new LoginResultDTO(false, null, "Account is deactivated. Contact HR/Admin.");
         }
 
+        // Check password
         if (!acc.password.equals(password)) {
             return new LoginResultDTO(false, null, "Invalid password");
         }
 
-        return new LoginResultDTO(true, acc.role, "Login successful", acc.employeeId,
-    acc.fullName);
-    
+        // Success - return employee details
+        return new LoginResultDTO(true, acc.role, "Login successful", acc.employeeId, acc.fullName);
     }
+
+    // ==========================================
+    // EMPLOYEE PROFILE METHODS
+    // ==========================================
+    
     /*
      * PSEUDOCODE - getEmployeeProfile():
      * 
-     * FUNCTION getEmployeeProfile(employeeId)
-     *     1. QUERY employees table WHERE employee_id = employeeId
-     *     2. IF found THEN
-     *        CREATE Employee object
-     *        RETURN Employee
-     *     3. ELSE
-     *        RETURN null
-     * END FUNCTION
+     * PURPOSE: Retrieve employee profile data from database
      * 
-     * NOTE: employeeId is String (e.g., "EMP001"), not int!
+     * FUNCTION getEmployeeProfile(employeeId)
+     *     1. PREPARE SQL query: SELECT from employees WHERE employee_id = ?
+     *     2. CONNECT to database
+     *     3. SET parameter: employeeId
+     *     4. EXECUTE query
+     *     5. IF result found THEN
+     *        a. CREATE Employee object
+     *        b. POPULATE all fields from ResultSet
+     *        c. RETURN Employee object
+     *     6. ELSE
+     *        - RETURN null (employee not found)
+     * 
+     * CATCH SQLException:
+     *     - LOG error
+     *     - THROW RemoteException
+     * END FUNCTION
      */
     @Override
     public Employee getEmployeeProfile(String employeeId) throws RemoteException {
@@ -148,22 +263,36 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
             return null;
 
         } catch (SQLException e) {
-    System.err.println("DB ERROR in getEmployeeProfile");
-    e.printStackTrace();  
-    throw new RemoteException("Failed to get employee profile", e);
-}
+            System.err.println("DB ERROR in getEmployeeProfile");
+            e.printStackTrace();  
+            throw new RemoteException("Failed to get employee profile", e);
+        }
     }
-      /*
+    
+    /*
      * PSEUDOCODE - updateEmployeeProfile():
      * 
+     * PURPOSE: Update employee profile information in database
+     * 
      * FUNCTION updateEmployeeProfile(employee)
-     *     1. VALIDATE employee object
-     *     2. UPDATE employees table
-     *     3. RETURN success/failure
+     *     1. VALIDATE input (employee not null, has employeeId)
+     *     2. PREPARE SQL UPDATE statement
+     *     3. CONNECT to database
+     *     4. SET parameters: firstName, lastName, email, phone, address
+     *     5. SET WHERE condition: employee_id = ?
+     *     6. EXECUTE update
+     *     7. IF rows affected > 0 THEN
+     *        - RETURN true (success)
+     *        ELSE
+     *        - RETURN false (no record updated)
+     * 
+     * CATCH SQLException:
+     *     THROW RemoteException
      * END FUNCTION
      */
     @Override
     public boolean updateEmployeeProfile(Employee employee) throws RemoteException {
+        // Validation
         if (employee == null || employee.getEmployeeId() == null) {
             return false;
         }
@@ -193,6 +322,278 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
         }
     }
 
+    // ==========================================
+    // FAMILY DETAILS METHODS
+    // ==========================================
+
+    /*
+     * PSEUDOCODE - getFamilyDetails():
+     * 
+     * PURPOSE: Retrieve all family members for a specific employee
+     * 
+     * FUNCTION getFamilyDetails(employeeId)
+     *     1. PREPARE SQL query: SELECT from family_members WHERE employee_id = ?
+     *     2. CREATE empty list for results
+     *     3. CONNECT to database
+     *     4. SET parameter: employeeId
+     *     5. EXECUTE query
+     *     6. FOR each row in ResultSet:
+     *        a. CREATE FamilyMember object
+     *        b. POPULATE all fields from database
+     *        c. HANDLE date conversion (SQL Date → String)
+     *        d. ADD to list
+     *     7. RETURN list (empty if no family members)
+     * 
+     * CATCH SQLException:
+     *     - LOG error
+     *     - THROW RemoteException
+     * END FUNCTION
+     */
+    @Override
+    public List<FamilyMember> getFamilyDetails(String employeeId) throws RemoteException {
+        final String sql = """
+            SELECT id, employee_id, name, relationship, ic_passport, 
+                   date_of_birth, contact_number
+            FROM family_members
+            WHERE employee_id = ?
+            ORDER BY id
+        """;
+
+        List<FamilyMember> familyMembers = new ArrayList<>();
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, employeeId);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                FamilyMember member = new FamilyMember();
+                member.setId(rs.getInt("id"));
+                member.setEmployeeId(rs.getString("employee_id"));
+                member.setName(rs.getString("name"));
+                member.setRelationship(rs.getString("relationship"));
+                member.setIcPassport(rs.getString("ic_passport"));
+
+                // Handle date - convert SQL Date to String (YYYY-MM-DD format)
+                Date dob = rs.getDate("date_of_birth");
+                member.setDateOfBirth(dob != null ? dob.toString() : "");
+
+                member.setContactNumber(rs.getString("contact_number"));
+                familyMembers.add(member);
+            }
+
+            return familyMembers;
+
+        } catch (SQLException e) {
+            System.err.println("DB ERROR in getFamilyDetails");
+            e.printStackTrace();
+            throw new RemoteException("Failed to get family details: " + e.getMessage(), e);
+        }
+    }
+
+    /*
+     * PSEUDOCODE - addFamilyMember():
+     * 
+     * PURPOSE: Insert a new family member record into database
+     * 
+     * FUNCTION addFamilyMember(member)
+     *     1. VALIDATE input:
+     *        - member not null
+     *        - name not null
+     *        - relationship not null
+     *        IF validation fails THEN RETURN false
+     *     
+     *     2. PREPARE SQL INSERT statement
+     *     3. CONNECT to database
+     *     4. SET parameters:
+     *        - employeeId, name, relationship (required)
+     *        - icPassport (optional)
+     *        - dateOfBirth (optional, convert String to SQL Date)
+     *        - contactNumber (optional)
+     *     5. EXECUTE insert
+     *     6. IF rows affected > 0 THEN
+     *        - RETURN true (success)
+     *        ELSE
+     *        - RETURN false (failed)
+     * 
+     * CATCH SQLException:
+     *     - LOG error
+     *     - THROW RemoteException
+     * END FUNCTION
+     */
+    @Override
+    public boolean addFamilyMember(FamilyMember member) throws RemoteException {
+        // Validation
+        if (member == null || member.getName() == null || member.getRelationship() == null) {
+            return false;
+        }
+
+        final String sql = """
+            INSERT INTO family_members (employee_id, name, relationship, 
+                                       ic_passport, date_of_birth, contact_number)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """;
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, member.getEmployeeId());
+            ps.setString(2, member.getName());
+            ps.setString(3, member.getRelationship());
+            ps.setString(4, member.getIcPassport());
+
+            // Handle date - convert String to SQL Date
+            if (member.getDateOfBirth() != null && !member.getDateOfBirth().isEmpty()) {
+                ps.setDate(5, Date.valueOf(member.getDateOfBirth()));
+            } else {
+                ps.setNull(5, Types.DATE);
+            }
+
+            ps.setString(6, member.getContactNumber());
+
+            int rowsAffected = ps.executeUpdate();
+            return rowsAffected > 0;
+
+        } catch (SQLException e) {
+            System.err.println("DB ERROR in addFamilyMember");
+            e.printStackTrace();
+            throw new RemoteException("Failed to add family member: " + e.getMessage(), e);
+        }
+    }
+
+    /*
+     * PSEUDOCODE - updateFamilyMember():
+     * 
+     * PURPOSE: Update an existing family member record
+     * 
+     * FUNCTION updateFamilyMember(member)
+     *     1. VALIDATE input:
+     *        - member not null
+     *        - member.id > 0 (valid ID)
+     *        IF validation fails THEN RETURN false
+     *     
+     *     2. PREPARE SQL UPDATE statement
+     *     3. CONNECT to database
+     *     4. SET parameters:
+     *        - name, relationship, icPassport
+     *        - dateOfBirth (convert String to SQL Date)
+     *        - contactNumber
+     *        - WHERE id = member.id
+     *     5. EXECUTE update
+     *     6. IF rows affected > 0 THEN
+     *        - RETURN true (success)
+     *        ELSE
+     *        - RETURN false (no record found or not updated)
+     * 
+     * CATCH SQLException:
+     *     - LOG error
+     *     - THROW RemoteException
+     * END FUNCTION
+     */
+    @Override
+    public boolean updateFamilyMember(FamilyMember member) throws RemoteException {
+        // Validation
+        if (member == null || member.getId() == 0) {
+            return false;
+        }
+
+        final String sql = """
+            UPDATE family_members 
+            SET name = ?, relationship = ?, ic_passport = ?,
+                date_of_birth = ?, contact_number = ?
+            WHERE id = ?
+        """;
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, member.getName());
+            ps.setString(2, member.getRelationship());
+            ps.setString(3, member.getIcPassport());
+
+            // Handle date - convert String to SQL Date
+            if (member.getDateOfBirth() != null && !member.getDateOfBirth().isEmpty()) {
+                ps.setDate(4, Date.valueOf(member.getDateOfBirth()));
+            } else {
+                ps.setNull(4, Types.DATE);
+            }
+
+            ps.setString(5, member.getContactNumber());
+            ps.setInt(6, member.getId());
+
+            int rowsAffected = ps.executeUpdate();
+            return rowsAffected > 0;
+
+        } catch (SQLException e) {
+            System.err.println("DB ERROR in updateFamilyMember");
+            e.printStackTrace();
+            throw new RemoteException("Failed to update family member: " + e.getMessage(), e);
+        }
+    }
+
+    /*
+     * PSEUDOCODE - deleteFamilyMember():
+     * 
+     * PURPOSE: Delete a family member record from database
+     * 
+     * FUNCTION deleteFamilyMember(memberId)
+     *     1. PREPARE SQL DELETE statement
+     *     2. CONNECT to database
+     *     3. SET parameter: memberId
+     *     4. EXECUTE delete
+     *     5. IF rows affected > 0 THEN
+     *        - RETURN true (successfully deleted)
+     *        ELSE
+     *        - RETURN false (record not found)
+     * 
+     * CATCH SQLException:
+     *     - LOG error
+     *     - THROW RemoteException
+     * END FUNCTION
+     */
+    @Override
+    public boolean deleteFamilyMember(int memberId) throws RemoteException {
+        final String sql = "DELETE FROM family_members WHERE id = ?";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setInt(1, memberId);
+            int rowsAffected = ps.executeUpdate();
+            return rowsAffected > 0;
+
+        } catch (SQLException e) {
+            System.err.println("DB ERROR in deleteFamilyMember");
+            e.printStackTrace();
+            throw new RemoteException("Failed to delete family member: " + e.getMessage(), e);
+        }
+    }
+
+    // ==========================================
+    // ACCOUNT MANAGEMENT METHODS
+    // ==========================================
+    
+    /*
+     * PSEUDOCODE - setAccountActive():
+     * 
+     * PURPOSE: Enable or disable a user account (HR/Admin only)
+     * 
+     * FUNCTION setAccountActive(username, active)
+     *     1. VALIDATE username not null
+     *     2. GET account from cache
+     *     3. IF account not found THEN RETURN false
+     *     4. UPDATE accounts table SET active = ? WHERE username = ?
+     *     5. IF update successful THEN
+     *        - UPDATE cache with new active status
+     *        - RETURN true
+     *        ELSE
+     *        - RETURN false
+     * 
+     * CATCH SQLException:
+     *     THROW RemoteException
+     * END FUNCTION
+     */
     @Override
     public boolean setAccountActive(String username, boolean active) throws RemoteException {
         if (username == null)
@@ -213,7 +614,7 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
 
             int updated = ps.executeUpdate();
             if (updated == 1) {
-                acc.active = active; // keep cache in sync
+                acc.active = active; // Keep cache in sync
                 return true;
             }
             return false;
@@ -223,6 +624,31 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
         }
     }
 
+    // ==========================================
+    // PASSWORD RESET METHODS
+    // ==========================================
+    
+    /*
+     * PSEUDOCODE - submitPasswordResetRequest():
+     * 
+     * PURPOSE: Submit a password reset request from employee
+     * 
+     * FUNCTION submitPasswordResetRequest(fullName, employeeId)
+     *     1. VALIDATE inputs (not null, not empty)
+     *     2. CHECK if employee exists in accounts table
+     *     3. IF employee not found THEN
+     *        - RETURN "No matching employee found"
+     *     4. INSERT request into reset_requests table with:
+     *        - request_time (current timestamp)
+     *        - full_name
+     *        - employee_id
+     *        - status = "PENDING"
+     *     5. RETURN "Reset request submitted"
+     * 
+     * CATCH SQLException:
+     *     THROW RemoteException
+     * END FUNCTION
+     */
     @Override
     public String submitPasswordResetRequest(String fullName, String employeeId) throws RemoteException {
         if (fullName == null || employeeId == null || fullName.trim().isEmpty() || employeeId.trim().isEmpty()) {
@@ -232,7 +658,7 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
         String fullNameTrim = fullName.trim();
         String employeeIdTrim = employeeId.trim();
 
-        // Verify employee exists (DB check, not CSV)
+        // Verify employee exists
         final String existsSql = """
                     SELECT 1
                     FROM accounts
@@ -248,7 +674,7 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
 
         try (Connection conn = DatabaseConnection.getConnection()) {
 
-            // 1) check exists
+            // 1) Check if employee exists
             try (PreparedStatement ps = conn.prepareStatement(existsSql)) {
                 ps.setString(1, employeeIdTrim);
                 ps.setString(2, fullNameTrim);
@@ -260,7 +686,7 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
                 }
             }
 
-            // 2) insert reset request
+            // 2) Insert reset request
             try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
                 ps.setTimestamp(1, Timestamp.valueOf(LocalDateTime.now()));
                 ps.setString(2, fullNameTrim);
@@ -276,33 +702,25 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
         }
     }
 
-    // ----- stubs for now (so it compiles) -----
-
-    @Override
-    public void registerEmployee(Employee employee) throws RemoteException {
-        throw new UnsupportedOperationException("Not implemented yet");
-    }
-
-    @Override
-    public Employee getEmployeeById(String employeeId) throws RemoteException {
-        throw new UnsupportedOperationException("Not implemented yet");
-    }
-
-    @Override
-    public MonthlySalaryDTO getMonthlySalary(String employeeId, int year, int month) throws RemoteException {
-        throw new UnsupportedOperationException("Not implemented yet");
-    }
-
-    @Override
-    public MonthlyReportDTO generateMonthlyReport(int year, int month) throws RemoteException {
-        throw new UnsupportedOperationException("Not implemented yet");
-    }
-
-    @Override
-    public YearlyReportDTO generateYearlyReport(int year) throws RemoteException {
-        throw new UnsupportedOperationException("Not implemented yet");
-    }
-
+    /*
+     * PSEUDOCODE - getResetRequests():
+     * 
+     * PURPOSE: Retrieve all password reset requests (HR/Admin view)
+     * 
+     * FUNCTION getResetRequests()
+     *     1. PREPARE SQL query: SELECT all from reset_requests
+     *     2. CREATE empty list
+     *     3. CONNECT to database
+     *     4. EXECUTE query
+     *     5. FOR each row:
+     *        - CREATE ResetRequestDTO object
+     *        - ADD to list
+     *     6. RETURN list (ordered by request_id DESC)
+     * 
+     * CATCH SQLException:
+     *     THROW RemoteException
+     * END FUNCTION
+     */
     @Override
     public List<ResetRequestDTO> getResetRequests() throws RemoteException {
         final String sql = """
@@ -333,6 +751,23 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
         }
     }
 
+    /*
+     * PSEUDOCODE - updateResetRequestStatus():
+     * 
+     * PURPOSE: Update status of a password reset request (HR/Admin action)
+     * 
+     * FUNCTION updateResetRequestStatus(requestId, newStatus)
+     *     1. VALIDATE newStatus (must be PENDING, APPROVED, or REJECTED)
+     *     2. UPDATE reset_requests table SET status = ? WHERE request_id = ?
+     *     3. IF rows affected = 1 THEN
+     *        - RETURN true
+     *        ELSE
+     *        - RETURN false
+     * 
+     * CATCH SQLException:
+     *     THROW RemoteException
+     * END FUNCTION
+     */
     @Override
     public boolean updateResetRequestStatus(int requestId, String newStatus) throws RemoteException {
         if (newStatus == null)
@@ -358,4 +793,62 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
         }
     }
 
+    // ==========================================
+    // STUB METHODS (Not implemented yet)
+    // ==========================================
+    
+    /*
+     * PSEUDOCODE - registerEmployee():
+     * 
+     * PURPOSE: Register a new employee (HR function)
+     * STATUS: Not implemented yet - HR team responsibility
+     */
+    @Override
+    public void registerEmployee(Employee employee) throws RemoteException {
+        throw new UnsupportedOperationException("Not implemented yet - HR team");
+    }
+
+    /*
+     * PSEUDOCODE - getEmployeeById():
+     * 
+     * PURPOSE: Get employee details by ID (HR function)
+     * STATUS: Not implemented yet - HR team responsibility
+     */
+    @Override
+    public Employee getEmployeeById(String employeeId) throws RemoteException {
+        throw new UnsupportedOperationException("Not implemented yet - HR team");
+    }
+
+    /*
+     * PSEUDOCODE - getMonthlySalary():
+     * 
+     * PURPOSE: Get employee salary for specific month (Admin function)
+     * STATUS: Not implemented yet - Admin team responsibility
+     */
+    @Override
+    public MonthlySalaryDTO getMonthlySalary(String employeeId, int year, int month) throws RemoteException {
+        throw new UnsupportedOperationException("Not implemented yet - Admin team");
+    }
+
+    /*
+     * PSEUDOCODE - generateMonthlyReport():
+     * 
+     * PURPOSE: Generate monthly report for all employees (HR function)
+     * STATUS: Not implemented yet - HR team responsibility
+     */
+    @Override
+    public MonthlyReportDTO generateMonthlyReport(int year, int month) throws RemoteException {
+        throw new UnsupportedOperationException("Not implemented yet - HR team");
+    }
+
+    /*
+     * PSEUDOCODE - generateYearlyReport():
+     * 
+     * PURPOSE: Generate yearly report for all employees (HR function)
+     * STATUS: Not implemented yet - HR team responsibility
+     */
+    @Override
+    public YearlyReportDTO generateYearlyReport(int year) throws RemoteException {
+        throw new UnsupportedOperationException("Not implemented yet - HR team");
+    }
 }
