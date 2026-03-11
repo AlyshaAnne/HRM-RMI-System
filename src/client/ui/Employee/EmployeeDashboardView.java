@@ -81,7 +81,7 @@ public class EmployeeDashboardView {
         Button leaveBtn = new Button("Leave Management");
         leaveBtn.setPrefWidth(250);
         leaveBtn.setStyle("-fx-font-size: 13px; -fx-padding: 10px;");
-        leaveBtn.setDisable(true); // Disabled until leave module is implemented
+        
         
         Button logoutBtn = new Button("Logout");
         logoutBtn.setPrefWidth(250);
@@ -123,8 +123,7 @@ public class EmployeeDashboardView {
          * 2. PASS stage, service, and loginResult
          */
         leaveBtn.setOnAction(e -> {
-            // TODO: Implement LeaveView
-            // stage.setScene(LeaveView.create(stage, service, loginResult));
+            stage.setScene(LeaveView.create(stage, service, loginResult));
         });
 
         /*

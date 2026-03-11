@@ -6,7 +6,10 @@ import java.rmi.Remote;
 import java.rmi.RemoteException;
 
 import shared.models.Employee;
-import shared.models.FamilyMember;  // ← ALREADY IMPORTED ✅
+import shared.models.FamilyMember;  
+import shared.models.LeaveApplication;
+import shared.models.LeaveBalance;
+import shared.models.LeaveType;
 import shared.dto.LoginResultDTO;
 import shared.dto.MonthlySalaryDTO;
 import shared.dto.MonthlyReportDTO;
@@ -42,10 +45,8 @@ public interface HRMService extends Remote {
      */
     boolean setAccountActive(String username, boolean active) throws RemoteException;
 
-    // ==========================================
+
     // EMPLOYEE PROFILE MANAGEMENT
-    // ==========================================
-    
     /*
      * PSEUDOCODE - registerEmployee():
      * Create new employee record (HR only)
@@ -70,10 +71,7 @@ public interface HRMService extends Remote {
      */
     boolean updateEmployeeProfile(Employee employee) throws RemoteException;
 
-    // ==========================================
-    // FAMILY DETAILS MANAGEMENT (ADD THESE!)
-    // ==========================================
-    
+    // FAMILY DETAILS MANAGEMENT
     /*
      * PSEUDOCODE - getFamilyDetails():
      * 
@@ -124,9 +122,9 @@ public interface HRMService extends Remote {
      */
     boolean deleteFamilyMember(int memberId) throws RemoteException;
 
-    // ==========================================
+  
     // PASSWORD RESET MANAGEMENT
-    // ==========================================
+
     
     /*
      * PSEUDOCODE - submitPasswordResetRequest():
@@ -167,4 +165,38 @@ public interface HRMService extends Remote {
      * Generate yearly report for all employees
      */
     YearlyReportDTO generateYearlyReport(int year) throws RemoteException;
+
+
+// LEAVE MANAGEMENT METHODS 
+
+
+/*
+ * PSEUDOCODE - getLeaveBalance():
+ * Get leave balance for an employee for current year
+ */
+List<LeaveBalance> getLeaveBalance(String employeeId, int year) throws RemoteException;
+
+/*
+ * PSEUDOCODE - getAvailableLeaveTypes():
+ * Get all active leave types
+ */
+List<LeaveType> getAvailableLeaveTypes() throws RemoteException;
+
+/*
+ * PSEUDOCODE - submitLeaveApplication():
+ * Submit a new leave application
+ */
+boolean submitLeaveApplication(LeaveApplication application) throws RemoteException;
+
+/*
+ * PSEUDOCODE - getLeaveApplications():
+ * Get all leave applications for an employee
+ */
+List<LeaveApplication> getLeaveApplications(String employeeId) throws RemoteException;
+
+/*
+ * PSEUDOCODE - cancelLeaveApplication():
+ * Cancel a pending leave application
+ */
+boolean cancelLeaveApplication(int applicationId) throws RemoteException;
 }

@@ -10,7 +10,9 @@ import shared.dto.MonthlySalaryDTO;
 import shared.dto.YearlyReportDTO;
 import shared.models.Employee;
 import shared.models.FamilyMember;
-
+import shared.models.LeaveApplication;
+import shared.models.LeaveBalance;
+import shared.models.LeaveType;
 import server.DatabaseConnection;
 
 import java.rmi.RemoteException;
@@ -851,4 +853,324 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
     public YearlyReportDTO generateYearlyReport(int year) throws RemoteException {
         throw new UnsupportedOperationException("Not implemented yet - HR team");
     }
+   
+// LEAVE MANAGEMENT METHODS 
+
+
+/*
+ * PSEUDOCODE - getLeaveBalance():
+ * 
+ * PURPOSE: Get leave balance for an employee for a specific year
+ * 
+ * FUNCTION getLeaveBalance(employeeId, year)
+ *     1. PREPARE SQL query with JOIN:
+ *        - SELECT from leave_balances
+ *        - JOIN with leave_types to get leave type name
+ *        - WHERE employee_id = ? AND year = ?
+ *     2. CONNECT to database
+ *     3. EXECUTE query
+ *     4. CREATE empty list
+ *     5. FOR each row:
+ *        a. CREATE LeaveBalance object
+ *        b. POPULATE all fields including leaveTypeName from join
+ *        c. ADD to list
+ *     6. RETURN list (empty if no balances found)
+ * 
+ * CATCH SQLException:
+ *     - LOG error
+ *     - THROW RemoteException
+ * END FUNCTION
+ */
+@Override
+public List<LeaveBalance> getLeaveBalance(String employeeId, int year) throws RemoteException {
+    final String sql = """
+        SELECT lb.id, lb.employee_id, lb.leave_type_id, lt.leave_type_name, 
+               lb.year, lb.total_days, lb.used_days, lb.remaining_days
+        FROM leave_balances lb
+        JOIN leave_types lt ON lb.leave_type_id = lt.id
+        WHERE lb.employee_id = ? AND lb.year = ?
+        ORDER BY lt.leave_type_name
+    """;
+
+    List<LeaveBalance> balances = new ArrayList<>();
+
+    try (Connection conn = DatabaseConnection.getConnection();
+         PreparedStatement ps = conn.prepareStatement(sql)) {
+
+        ps.setString(1, employeeId);
+        ps.setInt(2, year);
+        ResultSet rs = ps.executeQuery();
+
+        while (rs.next()) {
+            LeaveBalance balance = new LeaveBalance();
+            balance.setId(rs.getInt("id"));
+            balance.setEmployeeId(rs.getString("employee_id"));
+            balance.setLeaveTypeId(rs.getInt("leave_type_id"));
+            balance.setLeaveTypeName(rs.getString("leave_type_name"));
+            balance.setYear(rs.getInt("year"));
+            balance.setTotalDays(rs.getInt("total_days"));
+            balance.setUsedDays(rs.getInt("used_days"));
+            balance.setRemainingDays(rs.getInt("remaining_days"));
+            balances.add(balance);
+        }
+
+        return balances;
+
+    } catch (SQLException e) {
+        System.err.println("DB ERROR in getLeaveBalance");
+        e.printStackTrace();
+        throw new RemoteException("Failed to get leave balance: " + e.getMessage(), e);
+    }
+}
+
+/*
+ * PSEUDOCODE - getAvailableLeaveTypes():
+ * 
+ * PURPOSE: Get all active leave types for employee to choose from
+ * 
+ * FUNCTION getAvailableLeaveTypes()
+ *     1. PREPARE SQL query: SELECT from leave_types WHERE is_active = true
+ *     2. CONNECT to database
+ *     3. EXECUTE query
+ *     4. CREATE empty list
+ *     5. FOR each row:
+ *        a. CREATE LeaveType object
+ *        b. POPULATE all fields
+ *        c. ADD to list
+ *     6. RETURN list
+ * 
+ * CATCH SQLException:
+ *     - LOG error
+ *     - THROW RemoteException
+ * END FUNCTION
+ */
+@Override
+public List<LeaveType> getAvailableLeaveTypes() throws RemoteException {
+    final String sql = """
+        SELECT id, leave_type_name, default_days, description, is_active
+        FROM leave_types
+        WHERE is_active = true
+        ORDER BY leave_type_name
+    """;
+
+    List<LeaveType> leaveTypes = new ArrayList<>();
+
+    try (Connection conn = DatabaseConnection.getConnection();
+         PreparedStatement ps = conn.prepareStatement(sql);
+         ResultSet rs = ps.executeQuery()) {
+
+        while (rs.next()) {
+            LeaveType type = new LeaveType();
+            type.setId(rs.getInt("id"));
+            type.setLeaveTypeName(rs.getString("leave_type_name"));
+            type.setDefaultDays(rs.getInt("default_days"));
+            type.setDescription(rs.getString("description"));
+            type.setActive(rs.getBoolean("is_active"));
+            leaveTypes.add(type);
+        }
+
+        return leaveTypes;
+
+    } catch (SQLException e) {
+        System.err.println("DB ERROR in getAvailableLeaveTypes");
+        e.printStackTrace();
+        throw new RemoteException("Failed to get leave types: " + e.getMessage(), e);
+    }
+}
+
+/*
+ * PSEUDOCODE - submitLeaveApplication():
+ * 
+ * PURPOSE: Submit a new leave application
+ * 
+ * FUNCTION submitLeaveApplication(application)
+ *     1. VALIDATE input:
+ *        - application not null
+ *        - employeeId not null
+ *        - leaveTypeId valid
+ *        - dates not null
+ *        - numDays > 0
+ *        IF validation fails THEN RETURN false
+ *     
+ *     2. PREPARE SQL INSERT statement
+ *     3. CONNECT to database
+ *     4. SET parameters:
+ *        - employee_id, leave_type_id
+ *        - start_date, end_date, num_days
+ *        - reason
+ *        - status = 'Pending'
+ *        - applied_date = current timestamp
+ *     5. EXECUTE insert
+ *     6. IF rows affected > 0 THEN
+ *        - RETURN true (success)
+ *        ELSE
+ *        - RETURN false (failed)
+ * 
+ * CATCH SQLException:
+ *     - LOG error
+ *     - THROW RemoteException
+ * END FUNCTION
+ */
+@Override
+public boolean submitLeaveApplication(LeaveApplication application) throws RemoteException {
+    // Validation
+    if (application == null || application.getEmployeeId() == null || 
+        application.getLeaveTypeId() == 0 || application.getNumDays() <= 0) {
+        return false;
+    }
+
+    final String sql = """
+        INSERT INTO leave_applications (employee_id, leave_type_id, start_date, 
+                                       end_date, num_days, reason, status, applied_date)
+        VALUES (?, ?, ?, ?, ?, ?, 'Pending', CURRENT_TIMESTAMP)
+    """;
+
+    try (Connection conn = DatabaseConnection.getConnection();
+         PreparedStatement ps = conn.prepareStatement(sql)) {
+
+        ps.setString(1, application.getEmployeeId());
+        ps.setInt(2, application.getLeaveTypeId());
+        ps.setDate(3, Date.valueOf(application.getStartDate()));
+        ps.setDate(4, Date.valueOf(application.getEndDate()));
+        ps.setInt(5, application.getNumDays());
+        ps.setString(6, application.getReason());
+
+        int rowsAffected = ps.executeUpdate();
+        return rowsAffected > 0;
+
+    } catch (SQLException e) {
+        System.err.println("DB ERROR in submitLeaveApplication");
+        e.printStackTrace();
+        throw new RemoteException("Failed to submit leave application: " + e.getMessage(), e);
+    }
+}
+
+/*
+ * PSEUDOCODE - getLeaveApplications():
+ * 
+ * PURPOSE: Get all leave applications for an employee
+ * 
+ * FUNCTION getLeaveApplications(employeeId)
+ *     1. PREPARE SQL query with JOIN:
+ *        - SELECT from leave_applications
+ *        - JOIN with leave_types to get leave type name
+ *        - WHERE employee_id = ?
+ *        - ORDER BY applied_date DESC (newest first)
+ *     2. CONNECT to database
+ *     3. EXECUTE query
+ *     4. CREATE empty list
+ *     5. FOR each row:
+ *        a. CREATE LeaveApplication object
+ *        b. POPULATE all fields including leaveTypeName
+ *        c. HANDLE nullable fields (reviewedBy, reviewedDate, remarks)
+ *        d. ADD to list
+ *     6. RETURN list
+ * 
+ * CATCH SQLException:
+ *     - LOG error
+ *     - THROW RemoteException
+ * END FUNCTION
+ */
+@Override
+public List<LeaveApplication> getLeaveApplications(String employeeId) throws RemoteException {
+    final String sql = """
+        SELECT la.id, la.employee_id, la.leave_type_id, lt.leave_type_name,
+               la.start_date, la.end_date, la.num_days, la.reason, la.status,
+               la.applied_date, la.reviewed_by, la.reviewed_date, la.remarks
+        FROM leave_applications la
+        JOIN leave_types lt ON la.leave_type_id = lt.id
+        WHERE la.employee_id = ?
+        ORDER BY la.applied_date DESC
+    """;
+
+    List<LeaveApplication> applications = new ArrayList<>();
+
+    try (Connection conn = DatabaseConnection.getConnection();
+         PreparedStatement ps = conn.prepareStatement(sql)) {
+
+        ps.setString(1, employeeId);
+        ResultSet rs = ps.executeQuery();
+
+        while (rs.next()) {
+            LeaveApplication app = new LeaveApplication();
+            app.setId(rs.getInt("id"));
+            app.setEmployeeId(rs.getString("employee_id"));
+            app.setLeaveTypeId(rs.getInt("leave_type_id"));
+            app.setLeaveTypeName(rs.getString("leave_type_name"));
+            
+            // Convert SQL Date to String
+            Date startDate = rs.getDate("start_date");
+            app.setStartDate(startDate != null ? startDate.toString() : "");
+            
+            Date endDate = rs.getDate("end_date");
+            app.setEndDate(endDate != null ? endDate.toString() : "");
+            
+            app.setNumDays(rs.getInt("num_days"));
+            app.setReason(rs.getString("reason"));
+            app.setStatus(rs.getString("status"));
+            
+            // Convert Timestamp to String
+            Timestamp appliedDate = rs.getTimestamp("applied_date");
+            app.setAppliedDate(appliedDate != null ? appliedDate.toString() : "");
+            
+            app.setReviewedBy(rs.getString("reviewed_by"));
+            
+            Timestamp reviewedDate = rs.getTimestamp("reviewed_date");
+            app.setReviewedDate(reviewedDate != null ? reviewedDate.toString() : "");
+            
+            app.setRemarks(rs.getString("remarks"));
+            applications.add(app);
+        }
+
+        return applications;
+
+    } catch (SQLException e) {
+        System.err.println("DB ERROR in getLeaveApplications");
+        e.printStackTrace();
+        throw new RemoteException("Failed to get leave applications: " + e.getMessage(), e);
+    }
+}
+
+/*
+ * PSEUDOCODE - cancelLeaveApplication():
+ * 
+ * PURPOSE: Cancel a pending leave application
+ * 
+ * FUNCTION cancelLeaveApplication(applicationId)
+ *     1. PREPARE SQL DELETE statement
+ *        - DELETE from leave_applications
+ *        - WHERE id = ? AND status = 'Pending'
+ *        (Only pending applications can be cancelled)
+ *     2. CONNECT to database
+ *     3. SET parameter: applicationId
+ *     4. EXECUTE delete
+ *     5. IF rows affected > 0 THEN
+ *        - RETURN true (successfully cancelled)
+ *        ELSE
+ *        - RETURN false (not found or not pending)
+ * 
+ * CATCH SQLException:
+ *     - LOG error
+ *     - THROW RemoteException
+ * END FUNCTION
+ */
+@Override
+public boolean cancelLeaveApplication(int applicationId) throws RemoteException {
+    // Only allow cancelling pending applications
+    final String sql = "DELETE FROM leave_applications WHERE id = ? AND status = 'Pending'";
+
+    try (Connection conn = DatabaseConnection.getConnection();
+         PreparedStatement ps = conn.prepareStatement(sql)) {
+
+        ps.setInt(1, applicationId);
+        int rowsAffected = ps.executeUpdate();
+        return rowsAffected > 0;
+
+    } catch (SQLException e) {
+        System.err.println("DB ERROR in cancelLeaveApplication");
+        e.printStackTrace();
+        throw new RemoteException("Failed to cancel leave application: " + e.getMessage(), e);
+    }
+}
+
 }
