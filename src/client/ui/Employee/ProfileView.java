@@ -13,10 +13,10 @@ import shared.services.HRMService;
 
 import java.rmi.RemoteException;
 
-/*
- * PSEUDOCODE for ProfileView:
- * 
- * PURPOSE: Allow employee to view and update their personal profile
+import client.cache.ProfileCache;
+
+/*PSEUDOCODE for ProfileView:
+PURPOSE: Allow employee to view and update their personal profile
  * 
  * WORKFLOW:
  * 1. Load employee data from database using employeeId
@@ -34,30 +34,17 @@ import java.rmi.RemoteException;
  *     2. LOAD existing employee data from database
  *     3. POPULATE form fields with data
  *     4. ATTACH save and back button handlers
- *     5. RETURN Scene
- * END FUNCTION
- */
+ *     5. RETURN Scene*/
 public class ProfileView {
 
     public static Scene create(Stage stage, HRMService service, LoginResultDTO loginResult) {
 
-        /*
-         * STEP 1: Create title and subtitle
-         */
         Label title = new Label("Personal Profile");
         title.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
 
         Label subtitle = new Label("Update your personal information");
         subtitle.setStyle("-fx-font-size: 12px; -fx-text-fill: gray;");
 
-        /*
-         * STEP 2: Create form fields
-         * 
-         * PSEUDOCODE:
-         * - Create TextField for each editable field
-         * - Mark read-only fields (IC, Department, Position)
-         * - Use TextArea for multi-line address
-         */
         
         // Editable fields
         Label fnameLabel = new Label("First Name:*");
@@ -98,15 +85,7 @@ public class ProfileView {
         positionField.setEditable(false);
         positionField.setStyle("-fx-background-color: #e0e0e0;");
 
-        /*
-         * STEP 3: Arrange form in grid layout
-         * 
-         * PSEUDOCODE:
-         * - Use GridPane for label-field pairs
-         * - Column 0: Labels
-         * - Column 1: Input fields
-         * - Set gaps for spacing
-         */
+
         GridPane form = new GridPane();
         form.setVgap(12);
         form.setHgap(10);
@@ -129,9 +108,7 @@ public class ProfileView {
         departmentField.setPrefWidth(300);
         positionField.setPrefWidth(300);
 
-        /*
-         * STEP 4: Create action buttons
-         */
+        //Create action buttons
         Button saveBtn = new Button("Save Changes");
         saveBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8px 20px;");
 
@@ -141,9 +118,7 @@ public class ProfileView {
         HBox buttonRow = new HBox(15, saveBtn, backBtn);
         buttonRow.setAlignment(javafx.geometry.Pos.CENTER);
 
-        /*
-         * STEP 5: Arrange all components
-         */
+       //Arrange all components
         VBox root = new VBox(15, 
             title, 
             subtitle,
@@ -154,134 +129,160 @@ public class ProfileView {
         );
         root.setPadding(new Insets(25));
 
-        // -----------------------------
-        // STEP 6: LOAD EXISTING DATA
-        // -----------------------------
-        /*
-         * PSEUDOCODE - Load Employee Data:
-         * 
-         * WHEN view is created:
+        /*Load Employee Data:
+        WHEN view is created:
          * 1. GET employeeId from loginResult
          * 2. CALL service.getEmployeeProfile(employeeId)
          * 3. IF employee found THEN
          *    - Populate all form fields with employee data
          * 4. ELSE
          *    - Show error message
-         *    - Disable save button
-         */
+         *    - Disable save button*/
+
         loadEmployeeData(service, loginResult.getEmployeeId(), 
                         fnameField, lnameField, icField, emailField, 
                         phoneField, addressArea, departmentField, positionField);
 
-        // -----------------------------
-        // STEP 7: EVENT HANDLERS
-        // -----------------------------
 
-        /*
-         * PSEUDOCODE - Back Button:
-         * 
-         * When clicked:
-         * 1. Return to EmployeeDashboardView
-         * 2. PASS same stage, service, loginResult
-         */
         backBtn.setOnAction(e -> {
             stage.setScene(EmployeeDashboardView.create(stage, service, loginResult));
         });
 
-        /*
-         * PSEUDOCODE - Save Button:
-         * 
-         * When clicked:
-         * 1. VALIDATE all required fields
-         * 2. IF validation fails THEN
-         *    - Show error message
-         *    - EXIT
-         * 3. GET current employee object from database
-         * 4. UPDATE employee object with form values
-         * 5. CALL service.updateEmployeeProfile(employee)
-         * 6. IF successful THEN
-         *    - Show success message
-         * 7. ELSE
-         *    - Show error message
-         */
-        saveBtn.setOnAction(e -> {
-            saveProfile(service, loginResult.getEmployeeId(),
-                       fnameField, lnameField, emailField, phoneField, addressArea);
-        });
+/*Save Button with Cache Invalidation:
+ When clicked:
+ * 1. VALIDATE all required fields
+ * 2. GET current employee from server
+ * 3. UPDATE with form values
+ * 4. SAVE to server
+ * 5. INVALIDATE cache (force fresh load next time)
+ * 6. Show result message*/
 
-        // STEP 8: Return scene
+saveBtn.setOnAction(e -> {
+    // STEP 1: Get and validate input
+    String fname = fnameField.getText().trim();
+    String lname = lnameField.getText().trim();
+    String email = emailField.getText().trim();
+    String phone = phoneField.getText().trim();
+    String address = addressArea.getText().trim();
+
+    // Validation
+    if (fname.isEmpty() || lname.isEmpty()) {
+        showAlert(Alert.AlertType.WARNING, "Validation Error",
+                 "First Name and Last Name are required.");
+        return;
+    }
+
+    if (email.isEmpty() || !email.contains("@")) {
+        showAlert(Alert.AlertType.WARNING, "Validation Error",
+                 "Please enter a valid email address.");
+        return;
+    }
+
+    try {
+        // STEP 2: Get current employee data
+        Employee employee = service.getEmployeeProfile(loginResult.getEmployeeId());
+        
+        if (employee == null) {
+            showAlert(Alert.AlertType.ERROR, "Error", "Failed to load employee data.");
+            return;
+        }
+
+        // STEP 3: Update with form values
+        employee.setFirstName(fname);
+        employee.setLastName(lname);
+        employee.setEmail(email);
+        employee.setPhone(phone);
+        employee.setAddress(address);
+
+        // STEP 4: Save to server
+        boolean success = service.updateEmployeeProfile(employee);
+
+        if (success) {
+            // STEP 5:  INVALIDATE CACHE 
+            ProfileCache.getInstance().invalidateEmployee(loginResult.getEmployeeId());
+            
+            showAlert(Alert.AlertType.INFORMATION, "Success",
+                     " Profile updated successfully!\n\n" +
+                     "Cache invalidated - next load will fetch fresh data.");
+        } else {
+            showAlert(Alert.AlertType.ERROR, "Error",
+                     " Failed to update profile.");
+        }
+
+    } catch (RemoteException ex) {
+        showAlert(Alert.AlertType.ERROR, "Connection Error",
+                 "Failed to save: " + ex.getMessage());
+        ex.printStackTrace();
+    }
+});
+        
         return new Scene(root, 650, 700);
     }
 
-    // ==========================================
-    // HELPER METHODS
-    // ==========================================
 
-    /*
-     * PSEUDOCODE - loadEmployeeData():
-     * 
-     * PURPOSE: Load employee data from database and populate form
-     * 
-     * FUNCTION loadEmployeeData(service, employeeId, form_fields...)
-     *     TRY:
-     *         1. CALL RMI: employee = service.getEmployeeProfile(employeeId)
-     *         
-     *         2. IF employee is null THEN
-     *            - Show error: "Employee data not found"
-     *            - RETURN
-     *         
-     *         3. POPULATE form fields:
-     *            - fnameField = employee.firstName
-     *            - lnameField = employee.lastName
-     *            - icField = employee.icPassport
-     *            - emailField = employee.email
-     *            - phoneField = employee.phone
-     *            - addressArea = employee.address
-     *            - departmentField = employee.department
-     *            - positionField = employee.position
-     *     
-     *     CATCH RemoteException:
-     *         - Show error alert with exception message
-     *         - Log error for debugging
-     * END FUNCTION
-     */
-    private static void loadEmployeeData(HRMService service, String employeeId,
-                                        TextField fnameField, TextField lnameField, 
-                                        TextField icField, TextField emailField,
-                                        TextField phoneField, TextArea addressArea,
-                                        TextField departmentField, TextField positionField) {
-        try {
-            // Make RMI call to get employee profile
-            Employee employee = service.getEmployeeProfile(employeeId);
+/*loadEmployeeData() with Caching:
+ FUNCTION loadEmployeeData(service, employeeId, fields...)
+ *     1. GET cache instance
+ *     2. TRY to get employee from cache
+ *     3. IF found in cache THEN
+ *        - Use cached data (no network call!)
+ *        - Display immediately
+ *     4. ELSE (cache miss)
+ *        - Call server via RMI
+ *        - STORE result in cache
+ *        - Display data
+ *     
+ *     BENEFIT: Second visit to profile view is instant!*/
+
+private static void loadEmployeeData(HRMService service, String employeeId,
+                                    TextField fnameField, TextField lnameField,
+                                    TextField icField, TextField emailField,
+                                    TextField phoneField, TextArea addressArea,
+                                    TextField deptField, TextField posField) {
+    
+    ProfileCache cache = ProfileCache.getInstance();
+    
+    try {
+        // STEP 1: Try cache first
+        Employee employee = cache.getEmployee(employeeId);
+        
+        // STEP 2: If not in cache, fetch from server
+        if (employee == null) {
+            long startTime = System.currentTimeMillis();
+            employee = service.getEmployeeProfile(employeeId);
+            long duration = System.currentTimeMillis() - startTime;
+            System.out.println(" RMI call took: " + duration + "ms");
             
-            if (employee == null) {
-                showAlert(Alert.AlertType.ERROR, "Error", 
-                         "Employee data not found in database. Please contact HR.");
-                return;
+            // STEP 3: Store in cache for future use
+            if (employee != null) {
+                cache.putEmployee(employeeId, employee);
             }
-
-            // Populate form fields with employee data
+        }
+        
+        // STEP 4: Display data (whether from cache or server)
+        if (employee != null) {
             fnameField.setText(safeString(employee.getFirstName()));
             lnameField.setText(safeString(employee.getLastName()));
             icField.setText(safeString(employee.getIcPassport()));
             emailField.setText(safeString(employee.getEmail()));
             phoneField.setText(safeString(employee.getPhone()));
             addressArea.setText(safeString(employee.getAddress()));
-            departmentField.setText(safeString(employee.getDepartment()));
-            positionField.setText(safeString(employee.getPosition()));
-            
-        } catch (RemoteException ex) {
-            // Handle network/RMI errors
-            showAlert(Alert.AlertType.ERROR, "Connection Error", 
-                     "Failed to load employee data: " + ex.getMessage());
-            ex.printStackTrace();
+            deptField.setText(safeString(employee.getDepartment()));
+            posField.setText(safeString(employee.getPosition()));
+        } else {
+            showAlert(Alert.AlertType.WARNING, "Not Found",
+                     "Employee profile not found for ID: " + employeeId);
         }
-    }
 
-    /*
-     * PSEUDOCODE - saveProfile():
-     * 
-     * PURPOSE: Validate input and save changes to database
+    } catch (RemoteException ex) {
+        showAlert(Alert.AlertType.ERROR, "Connection Error",
+                 "Failed to load employee data: " + ex.getMessage());
+        ex.printStackTrace();
+    }
+}
+
+    /*saveProfile():
+     PURPOSE: Validate input and save changes to database
      * 
      * FUNCTION saveProfile(service, employeeId, form_fields...)
      *     1. VALIDATE required fields:
@@ -372,10 +373,10 @@ public class ProfileView {
             // STEP 5: Show result to user
             if (success) {
                 showAlert(Alert.AlertType.INFORMATION, "Success", 
-                         "✅ Your profile has been updated successfully!");
+                         " Your profile has been updated successfully!");
             } else {
                 showAlert(Alert.AlertType.ERROR, "Error", 
-                         "❌ Failed to update profile. Please try again or contact HR.");
+                         " Failed to update profile. Please try again or contact HR.");
             }
             
         } catch (RemoteException ex) {
@@ -386,36 +387,12 @@ public class ProfileView {
         }
     }
 
-    /*
-     * PSEUDOCODE - safeString():
-     * 
-     * PURPOSE: Convert null values to empty strings for display
-     * 
-     * FUNCTION safeString(s)
-     *     IF s is null THEN
-     *         RETURN empty string ""
-     *     ELSE
-     *         RETURN s
-     * END FUNCTION
-     * 
-     * WHY: TextField.setText(null) can cause issues
-     */
+
     private static String safeString(String s) {
         return s == null ? "" : s;
     }
 
-    /*
-     * PSEUDOCODE - showAlert():
-     * 
-     * PURPOSE: Display alert dialog to user
-     * 
-     * FUNCTION showAlert(type, title, content)
-     *     1. CREATE Alert with specified type (INFO, WARNING, ERROR)
-     *     2. SET title
-     *     3. SET content message
-     *     4. SHOW alert and WAIT for user to close it
-     * END FUNCTION
-     */
+
     private static void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
         alert.setTitle(title);

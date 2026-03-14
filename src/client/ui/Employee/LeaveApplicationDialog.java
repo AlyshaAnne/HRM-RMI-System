@@ -15,10 +15,8 @@ import java.time.Year;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
-/*
- * PSEUDOCODE for LeaveApplicationDialog:
- * 
- * PURPOSE: Dialog for employee to apply for leave
+/*LeaveApplicationDialog:
+ PURPOSE: Dialog for employee to apply for leave
  * 
  * WORKFLOW:
  * 1. Select leave type from dropdown
@@ -39,9 +37,8 @@ import java.util.List;
  *     2. LOAD available leave types
  *     3. LOAD leave balances for validation
  *     4. SET up date change listeners
- *     5. DEFINE save behavior with validation
- * END CONSTRUCTOR
- */
+ *     5. DEFINE save behavior with validation*/
+
 public class LeaveApplicationDialog extends Dialog<Boolean> {
 
     private List<LeaveBalance> leaveBalances;
@@ -52,8 +49,7 @@ public class LeaveApplicationDialog extends Dialog<Boolean> {
     private Label balanceWarningLabel;
     private TextArea reasonArea;
 
-    /*
-     * PSEUDOCODE - Constructor:
+    /*Constructor:
      * 
      * PARAMETERS:
      * - service: RMI service for database operations
@@ -86,9 +82,7 @@ public class LeaveApplicationDialog extends Dialog<Boolean> {
         grid.setVgap(15);
         grid.setPadding(new Insets(20));
 
-        /*
-         * STEP 3: Create input fields
-         */
+        //STEP 3: Create input fields
 
         // Leave Type selection (Required)
         Label leaveTypeLabel = new Label("Leave Type:*");
@@ -178,11 +172,10 @@ public class LeaveApplicationDialog extends Dialog<Boolean> {
 
         getDialogPane().setContent(grid);
 
-        // STEP 5: Load data from database
-        /*
-         * PSEUDOCODE - Load Leave Types:
-         * 
-         * TRY:
+        
+        /*Load data from database
+         Load Leave Types:
+         TRY:
          *     1. CALL service.getAvailableLeaveTypes()
          *     2. POPULATE leaveTypeBox with types
          * CATCH RemoteException:
@@ -202,14 +195,12 @@ public class LeaveApplicationDialog extends Dialog<Boolean> {
             ex.printStackTrace();
         }
 
-        /*
-         * PSEUDOCODE - Load Leave Balances:
-         * 
-         * TRY:
+        /*Load Leave Balances: 
+         TRY:
          *     1. GET current year
          *     2. CALL service.getLeaveBalance(employeeId, year)
          *     3. STORE in leaveBalances for validation
-         * CATCH RemoteException:
+         CATCH RemoteException:
          *     SHOW error alert
          */
         try {
@@ -221,16 +212,14 @@ public class LeaveApplicationDialog extends Dialog<Boolean> {
             ex.printStackTrace();
         }
 
-        // STEP 6: Set up listeners
-        /*
-         * PSEUDOCODE - Date Change Listeners:
-         * 
-         * When start date OR end date changes:
+        /*Set up listeners
+         Date Change Listeners:
+        When start date OR end date changes:
          * 1. CALCULATE number of days
          * 2. UPDATE days label
          * 3. CHECK leave balance
-         * 4. SHOW warning if insufficient balance
-         */
+         * 4. SHOW warning if insufficient balance*/
+
         startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> {
             calculateDays();
             checkLeaveBalance();
@@ -245,10 +234,8 @@ public class LeaveApplicationDialog extends Dialog<Boolean> {
             checkLeaveBalance();
         });
 
-        /*
-         * STEP 7: Define save behavior
-         * 
-         * PSEUDOCODE - Submit Button Action:
+        /*Define save behavior
+        Submit Button Action:
          * 
          * IF Submit button clicked THEN
          *     1. VALIDATE all required fields:
@@ -282,9 +269,8 @@ public class LeaveApplicationDialog extends Dialog<Boolean> {
          * 
          * CATCH RemoteException:
          *     SHOW error alert
-         *     RETURN false
-         * END
-         */
+         *     RETURN false*/
+
         setResultConverter(dialogButton -> {
             if (dialogButton == submitButtonType) {
                 
@@ -383,23 +369,15 @@ public class LeaveApplicationDialog extends Dialog<Boolean> {
         leaveTypeBox.requestFocus();
     }
 
-    // ==========================================
-    // HELPER METHODS
-    // ==========================================
 
-    /*
-     * PSEUDOCODE - calculateDays():
-     * 
-     * PURPOSE: Calculate number of days between start and end date
-     * 
-     * FUNCTION calculateDays()
+    /*calculateDays():
+     PURPOSE: Calculate number of days between start and end date
+     FUNCTION calculateDays()
      *     IF both start date AND end date selected THEN
      *         1. CALCULATE days = (end - start) + 1
      *         2. UPDATE days label
      *     ELSE
-     *         SHOW "0 days"
-     * END FUNCTION
-     */
+     *         SHOW "0 days"*/
     private void calculateDays() {
         LocalDate start = startDatePicker.getValue();
         LocalDate end = endDatePicker.getValue();
@@ -412,12 +390,9 @@ public class LeaveApplicationDialog extends Dialog<Boolean> {
         }
     }
 
-    /*
-     * PSEUDOCODE - checkLeaveBalance():
-     * 
-     * PURPOSE: Check if employee has sufficient leave balance
-     * 
-     * FUNCTION checkLeaveBalance()
+    /*checkLeaveBalance():
+     PURPOSE: Check if employee has sufficient leave balance
+     FUNCTION checkLeaveBalance()
      *     1. GET selected leave type
      *     2. GET start and end dates
      *     3. IF all selected THEN
@@ -443,13 +418,13 @@ public class LeaveApplicationDialog extends Dialog<Boolean> {
 
             if (balance != null) {
                 if (days > balance.getRemainingDays()) {
-                    balanceWarningLabel.setText("⚠ Warning: You only have " + 
+                    balanceWarningLabel.setText("Warning: You only have " + 
                                                balance.getRemainingDays() + 
                                                " day(s) remaining for " + 
                                                selectedType.getLeaveTypeName() + "!");
                     balanceWarningLabel.setVisible(true);
                 } else {
-                    balanceWarningLabel.setText("✓ You have " + 
+                    balanceWarningLabel.setText("You have " + 
                                                balance.getRemainingDays() + 
                                                " day(s) remaining");
                     balanceWarningLabel.setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
@@ -463,12 +438,9 @@ public class LeaveApplicationDialog extends Dialog<Boolean> {
         }
     }
 
-    /*
-     * PSEUDOCODE - findBalance():
-     * 
-     * PURPOSE: Find leave balance for specific leave type
-     * 
-     * FUNCTION findBalance(leaveTypeId)
+    /*findBalance():
+     PURPOSE: Find leave balance for specific leave type
+    FUNCTION findBalance(leaveTypeId)
      *     FOR each balance in leaveBalances:
      *         IF balance.leaveTypeId == leaveTypeId THEN
      *             RETURN balance
@@ -486,8 +458,7 @@ public class LeaveApplicationDialog extends Dialog<Boolean> {
         return null;
     }
 
-    /*
-     * PSEUDOCODE - showAlert():
+    /*showAlert():
      * Display alert dialog to user
      */
     private void showAlert(Alert.AlertType type, String title, String content) {

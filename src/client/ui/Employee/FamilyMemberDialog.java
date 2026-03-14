@@ -9,8 +9,7 @@ import shared.services.HRMService;
 import java.rmi.RemoteException;
 import java.time.LocalDate;
 
-/*
- * PSEUDOCODE for FamilyMemberDialog:
+/*FamilyMemberDialog:
  * 
  * PURPOSE: Popup dialog for adding/editing a single family member
  * 
@@ -36,8 +35,7 @@ import java.time.LocalDate;
  */
 public class FamilyMemberDialog extends Dialog<Boolean> {
 
-    /*
-     * PSEUDOCODE - Constructor:
+    /*Constructor:
      * 
      * PARAMETERS:
      * - service: RMI service for database operations
@@ -49,37 +47,28 @@ public class FamilyMemberDialog extends Dialog<Boolean> {
      * 2. CREATE form layout with all fields
      * 3. IF editing THEN pre-fill fields with existing data
      * 4. SET result converter (what happens when Save is clicked)
-     * 5. CONFIGURE dialog buttons
-     */
+     * 5. CONFIGURE dialog buttons*/
+
     public FamilyMemberDialog(HRMService service, String employeeId, FamilyMember existing) {
         
-        // STEP 1: Determine mode and set title
+        // Determine mode and set title
         boolean isEditMode = (existing != null);
         setTitle(isEditMode ? "Edit Family Member" : "Add Family Member");
         setHeaderText(null);
         setResizable(true);
 
-        // STEP 2: Create dialog buttons
+        // Create dialog buttons
         ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
         ButtonType cancelButtonType = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
         getDialogPane().getButtonTypes().addAll(saveButtonType, cancelButtonType);
 
-        // STEP 3: Create form layout
+        // Create form layout
         GridPane grid = new GridPane();
         grid.setHgap(10);
         grid.setVgap(10);
         grid.setPadding(new Insets(20));
 
-        /*
-         * STEP 4: Create input fields
-         * 
-         * FIELDS:
-         * - Name: Required, TextField
-         * - Relationship: Required, ComboBox with predefined options
-         * - IC/Passport: Optional, TextField
-         * - Date of Birth: Optional, DatePicker
-         * - Contact Number: Optional, TextField
-         */
+
 
         // Name field (Required)
         Label nameLabel = new Label("Name:*");
@@ -117,10 +106,7 @@ public class FamilyMemberDialog extends Dialog<Boolean> {
         Label noteLabel = new Label("* Required fields");
         noteLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: gray;");
 
-        /*
-         * STEP 5: Pre-fill fields if editing
-         * 
-         * PSEUDOCODE:
+        /*Pre-fill fields if editing
          * IF isEditMode THEN
          *     FOR each field:
          *         GET value from existing object
@@ -145,7 +131,7 @@ public class FamilyMemberDialog extends Dialog<Boolean> {
             contactField.setText(existing.getContactNumber() != null ? existing.getContactNumber() : "");
         }
 
-        // STEP 6: Add fields to grid layout
+        //Add fields to grid layout
         grid.add(nameLabel, 0, 0);
         grid.add(nameField, 1, 0);
         grid.add(relationshipLabel, 0, 1);
@@ -160,10 +146,8 @@ public class FamilyMemberDialog extends Dialog<Boolean> {
 
         getDialogPane().setContent(grid);
 
-        /*
-         * STEP 7: Define what happens when Save button is clicked
-         * 
-         * PSEUDOCODE - Result Converter:
+        /*Define what happens when Save button is clicked
+        Result Converter:
          * 
          * IF Save button clicked THEN
          *     1. VALIDATE required fields:
@@ -199,9 +183,8 @@ public class FamilyMemberDialog extends Dialog<Boolean> {
          * 
          * CATCH RemoteException:
          *     - Show error alert
-         *     - RETURN false
-         * END
-         */
+         *     - RETURN false */
+
         setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
                 
@@ -280,21 +263,19 @@ public class FamilyMemberDialog extends Dialog<Boolean> {
             return false;
         });
 
-        // STEP 8: Set initial focus to name field for better UX
+        //Set initial focus to name field for better UX
         nameField.requestFocus();
     }
 
-    /*
-     * PSEUDOCODE - showAlert():
+    /*showAlert():
      * 
      * PURPOSE: Display alert dialog within this dialog
      * 
      * FUNCTION showAlert(type, title, content)
      *     1. CREATE Alert with specified type
      *     2. SET title and content
-     *     3. SHOW and WAIT for user to close
-     * END FUNCTION
-     */
+     *     3. SHOW and WAIT for user to close*/
+    
     private void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
         alert.setTitle(title);

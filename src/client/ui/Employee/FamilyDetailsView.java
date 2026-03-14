@@ -14,75 +14,41 @@ import shared.services.HRMService;
 import java.rmi.RemoteException;
 import java.util.List;
 
-/*
- * PSEUDOCODE for FamilyDetailsView:
- * 
- * PURPOSE: Manage family member records (CRUD operations)
- * 
- * FEATURES:
- * - Display all family members in a table
- * - Add new family member
- * - Edit existing family member
- * - Delete family member
- * 
- * DATABASE INTERACTION:
+import client.cache.ProfileCache;
+
+/*FamilyDetailsView:
+ PURPOSE: Manage family member records (CRUD operations) with caching
+ CACHING STRATEGY:
+ - Cache family member list to reduce network calls
+ - Invalidate cache after Add/Edit/Delete operations
+ - Force fresh fetch after data modifications
+ DATABASE INTERACTION:
  * - READ: service.getFamilyDetails(employeeId) → List<FamilyMember>
  * - CREATE: service.addFamilyMember(member) → boolean
  * - UPDATE: service.updateFamilyMember(member) → boolean
- * - DELETE: service.deleteFamilyMember(memberId) → boolean
- * 
- * FUNCTION create(stage, service, loginResult)
- *     1. CREATE UI components:
- *        - TableView to display family members
- *        - Buttons for Add, Edit, Delete operations
- *     2. LOAD existing family members from database
- *     3. ATTACH event handlers for CRUD operations
- *     4. RETURN Scene
- * END FUNCTION
- */
+ * - DELETE: service.deleteFamilyMember(memberId) → boolean*/
+
 public class FamilyDetailsView {
 
     private static TableView<FamilyMember> familyTable;
 
     public static Scene create(Stage stage, HRMService service, LoginResultDTO loginResult) {
 
-        /*
-         * STEP 1: Create title and subtitle
-         */
+
         Label title = new Label("Family Details Management");
         title.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
 
         Label subtitle = new Label("Manage your family members information");
         subtitle.setStyle("-fx-font-size: 12px; -fx-text-fill: gray;");
 
-        /*
-         * STEP 2: Create family members table
-         * 
-         * PSEUDOCODE:
-         * - Create TableView to display family members
-         * - Define columns for each field
-         * - Set column widths and properties
-         * - Enable row selection
-         */
         familyTable = new TableView<>();
         familyTable.setPrefHeight(350);
         familyTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         familyTable.setPlaceholder(new Label("No family members added yet. Click 'Add Family Member' to start."));
 
-        /*
-         * PSEUDOCODE - Table Columns:
-         * 
-         * FOR each column:
-         *     1. CREATE TableColumn with display name
-         *     2. SET CellValueFactory to bind to FamilyMember property
-         *     3. SET preferred width
-         *     4. ADD to table
-         * 
-         * PropertyValueFactory automatically maps to getter methods:
-         * - "name" → calls member.getName()
-         * - "relationship" → calls member.getRelationship()
-         * etc.
-         */
+        /*PropertyValueFactory automatically maps to getter methods:
+         - "name" → calls member.getName()
+         - "relationship" → calls member.getRelationship()*/
         
         TableColumn<FamilyMember, String> nameCol = new TableColumn<>("Name");
         nameCol.setCellValueFactory(new PropertyValueFactory<>("name"));
@@ -106,14 +72,7 @@ public class FamilyDetailsView {
 
         familyTable.getColumns().addAll(nameCol, relationshipCol, icCol, dobCol, contactCol);
 
-        /*
-         * STEP 3: Create action buttons
-         * 
-         * PSEUDOCODE:
-         * - Create buttons for CRUD operations
-         * - Apply styling and colors
-         * - Set appropriate widths
-         */
+
         Button addBtn = new Button("Add Family Member");
         addBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8px 15px;");
         addBtn.setPrefWidth(180);
@@ -136,9 +95,6 @@ public class FamilyDetailsView {
         HBox buttonRow2 = new HBox(backBtn);
         buttonRow2.setAlignment(javafx.geometry.Pos.CENTER);
 
-        /*
-         * STEP 4: Arrange components in layout
-         */
         VBox root = new VBox(15, 
             title, 
             subtitle,
@@ -150,59 +106,56 @@ public class FamilyDetailsView {
         );
         root.setPadding(new Insets(25));
 
-        // -----------------------------
-        // STEP 5: LOAD EXISTING DATA
-        // -----------------------------
-        /*
-         * PSEUDOCODE - Initial Data Load:
-         * 
-         * WHEN view is created:
-         * 1. GET employeeId from loginResult
-         * 2. CALL loadFamilyData() to fetch from database
-         * 3. POPULATE table with results
-         */
+
+        /*LOAD EXISTING DATA
+         Initial Data Load:
+         WHEN view is created:
+         1. GET employeeId from loginResult
+         2. CALL loadFamilyData() to fetch from database (or cache)
+         3. POPULATE table with results*/
+
         loadFamilyData(service, loginResult.getEmployeeId());
 
-        // -----------------------------
-        // STEP 6: EVENT HANDLERS
-        // -----------------------------
+        /*EVENT HANDLERS
+         Add Button:
+         When clicked:
+         1. CREATE FamilyMemberDialog with null (add mode)
+         2. SHOW dialog and WAIT for user input
+         3. IF user clicked Save AND save successful THEN
+           - INVALIDATE cache 
+           - Reload family data to refresh table
+           - Show success feedback*/
 
-        /*
-         * PSEUDOCODE - Add Button:
-         * 
-         * When clicked:
-         * 1. CREATE FamilyMemberDialog with null (add mode)
-         * 2. SHOW dialog and WAIT for user input
-         * 3. IF user clicked Save AND save successful THEN
-         *    - Reload family data to refresh table
-         *    - Show success feedback
-         */
         addBtn.setOnAction(e -> {
             FamilyMemberDialog dialog = new FamilyMemberDialog(service, loginResult.getEmployeeId(), null);
             dialog.showAndWait().ifPresent(success -> {
                 if (success) {
+                    //INVALIDATE CACHE after adding new family member
+                    ProfileCache.getInstance().invalidateFamilyMembers(loginResult.getEmployeeId());
+                    
+                    // Reload data (will fetch fresh from server since cache is invalidated)
                     loadFamilyData(service, loginResult.getEmployeeId());
+                    
                     showAlert(Alert.AlertType.INFORMATION, "Success", 
-                             "✅ Family member added successfully!");
+                             "Family member added successfully!");
                 }
             });
         });
 
-        /*
-         * PSEUDOCODE - Edit Button:
-         * 
-         * When clicked:
-         * 1. GET selected family member from table
-         * 2. IF nothing selected THEN
-         *    - Show warning: "Please select a family member"
-         *    - EXIT
-         * 3. ELSE
-         *    - CREATE FamilyMemberDialog with selected member (edit mode)
-         *    - SHOW dialog and WAIT for user input
-         *    - IF user clicked Save AND save successful THEN
-         *      - Reload family data to refresh table
-         *      - Show success feedback
-         */
+        /*Edit Button:
+         When clicked:
+         1. GET selected family member from table
+         2. IF nothing selected THEN
+            - Show warning: "Please select a family member"
+            - EXIT
+        3. ELSE
+         - CREATE FamilyMemberDialog with selected member (edit mode)
+         - SHOW dialog and WAIT for user input
+         - IF user clicked Save AND save successful THEN
+         - INVALIDATE cache 
+         - Reload family data to refresh table
+         - Show success feedback*/
+
         editBtn.setOnAction(e -> {
             FamilyMember selected = familyTable.getSelectionModel().getSelectedItem();
             
@@ -215,37 +168,38 @@ public class FamilyDetailsView {
             FamilyMemberDialog dialog = new FamilyMemberDialog(service, loginResult.getEmployeeId(), selected);
             dialog.showAndWait().ifPresent(success -> {
                 if (success) {
+                    // INVALIDATE CACHE after editing family member
+                    ProfileCache.getInstance().invalidateFamilyMembers(loginResult.getEmployeeId());
+                    
+                    // Reload data (will fetch fresh from server)
                     loadFamilyData(service, loginResult.getEmployeeId());
+                    
                     showAlert(Alert.AlertType.INFORMATION, "Success", 
-                             "✅ Family member updated successfully!");
+                             "Family member updated successfully!");
                 }
             });
         });
 
-        /*
-         * PSEUDOCODE - Delete Button:
-         * 
-         * When clicked:
-         * 1. GET selected family member from table
-         * 2. IF nothing selected THEN
-         *    - Show warning: "Please select a family member"
-         *    - EXIT
-         * 
-         * 3. SHOW confirmation dialog:
-         *    - Message: "Are you sure you want to delete [name]?"
-         *    - Buttons: OK and Cancel
-         * 
-         * 4. IF user confirms (clicked OK) THEN
-         *    TRY:
-         *        - CALL service.deleteFamilyMember(memberId)
-         *        - IF successful THEN
-         *          - Remove from table immediately
-         *          - Show success message
-         *          ELSE
-         *          - Show error message
-         *    CATCH RemoteException:
-         *        - Show error alert with exception details
-         */
+        /*Delete Button:
+         When clicked:
+        1. GET selected family member from table
+        2. IF nothing selected THEN
+           - Show warning: "Please select a family member"
+           - EXIT
+        3. SHOW confirmation dialog:
+           - Message: "Are you sure you want to delete [name]?"
+            - Buttons: OK and Cancel
+        4. IF user confirms (clicked OK) THEN
+         TRY:
+        - CALL service.deleteFamilyMember(memberId)
+        - IF successful THEN
+        - INVALIDATE cache (important!)
+        - Remove from table immediately
+        - Show success message
+         ELSE
+        - Show error message
+        CATCH RemoteException:
+        - Show error alert with exception details*/
         deleteBtn.setOnAction(e -> {
             FamilyMember selected = familyTable.getSelectionModel().getSelectedItem();
             
@@ -269,13 +223,17 @@ public class FamilyDetailsView {
                         boolean success = service.deleteFamilyMember(selected.getId());
                         
                         if (success) {
+                            // INVALIDATE CACHE after deleting family member
+                            ProfileCache.getInstance().invalidateFamilyMembers(loginResult.getEmployeeId());
+                            
                             // Remove from table UI
                             familyTable.getItems().remove(selected);
+                            
                             showAlert(Alert.AlertType.INFORMATION, "Success", 
-                                     "✅ Family member deleted successfully.");
+                                     "Family member deleted successfully.");
                         } else {
                             showAlert(Alert.AlertType.ERROR, "Error", 
-                                     "❌ Failed to delete family member. Please try again.");
+                                     "Failed to delete family member. Please try again.");
                         }
                     } catch (RemoteException ex) {
                         showAlert(Alert.AlertType.ERROR, "Connection Error", 
@@ -286,77 +244,78 @@ public class FamilyDetailsView {
             });
         });
 
-        /*
-         * PSEUDOCODE - Back Button:
-         * 
-         * When clicked:
-         * 1. Return to EmployeeDashboardView
-         * 2. PASS same stage, service, loginResult
-         */
+
         backBtn.setOnAction(e -> {
             stage.setScene(EmployeeDashboardView.create(stage, service, loginResult));
         });
 
-        // STEP 7: Return scene
         return new Scene(root, 800, 600);
     }
 
-    // ==========================================
-    // HELPER METHODS
-    // ==========================================
 
-    /*
-     * PSEUDOCODE - loadFamilyData():
-     * 
-     * PURPOSE: Load family members from database and populate table
-     * 
-     * FUNCTION loadFamilyData(service, employeeId)
-     *     TRY:
-     *         1. CALL RMI: familyList = service.getFamilyDetails(employeeId)
-     *         
-     *         2. CLEAR existing items in table
-     *         
-     *         3. IF familyList is not null AND not empty THEN
-     *            - ADD all family members to table
-     *            - Table will automatically display them
-     *         4. ELSE
-     *            - Table shows placeholder: "No family members added yet"
-     *     
-     *     CATCH RemoteException:
-     *         - Show error alert
-     *         - Log exception for debugging
-     * END FUNCTION
-     */
+    /*loadFamilyData() with Caching:
+    PURPOSE: Load family members from cache or database
+    FUNCTION loadFamilyData(service, employeeId)
+     1. GET cache instance     
+     TRY:
+     2. TRY to get family members from cache
+     3. IF not in cache (null) THEN
+      a. MEASURE start time
+      b. CALL RMI: service.getFamilyDetails(employeeId)
+      c. MEASURE end time and calculate duration
+      d. LOG performance metrics
+      e. IF data retrieved successfully THEN
+       - STORE in cache for future use
+     4. CLEAR existing items in table
+     5. IF familyList is not null AND not empty THEN
+      - ADD all family members to table
+      - Table will automatically display them
+      6. ELSE
+     - Table shows placeholder: "No family members added yet"
+     CATCH RemoteException:
+     - Show error alert
+     - Log exception for debugging*/
+
     private static void loadFamilyData(HRMService service, String employeeId) {
+        ProfileCache cache = ProfileCache.getInstance();
+        
         try {
-            // Make RMI call to get family members from database
-            List<FamilyMember> familyMembers = service.getFamilyDetails(employeeId);
+            // STEP 1: Try cache first
+            List<FamilyMember> members = cache.getFamilyMembers(employeeId);
             
-            // Clear table
-            familyTable.getItems().clear();
-            
-            // Populate table with data
-            if (familyMembers != null && !familyMembers.isEmpty()) {
-                familyTable.getItems().addAll(familyMembers);
+            // STEP 2: If not in cache, fetch from server
+            if (members == null) {
+                long startTime = System.currentTimeMillis();
+                members = service.getFamilyDetails(employeeId);
+                long duration = System.currentTimeMillis() - startTime;
+                System.out.println("RMI call took: " + duration + "ms");
+                
+                // STEP 3: Store in cache for future use
+                if (members != null) {
+                    cache.putFamilyMembers(employeeId, members);
+                }
             }
             
+            // STEP 4: Update table
+            familyTable.getItems().clear();
+            
+            if (members != null && !members.isEmpty()) {
+                familyTable.getItems().addAll(members);
+            }
+
         } catch (RemoteException ex) {
-            showAlert(Alert.AlertType.ERROR, "Connection Error", 
-                     "Failed to load family data: " + ex.getMessage());
+            showAlert(Alert.AlertType.ERROR, "Connection Error",
+                     "Failed to load family details: " + ex.getMessage());
             ex.printStackTrace();
         }
     }
 
-    /*
-     * PSEUDOCODE - showAlert():
-     * 
-     * PURPOSE: Display alert dialog to user
-     * 
-     * FUNCTION showAlert(type, title, content)
-     *     1. CREATE Alert with specified type
-     *     2. SET title and content
-     *     3. SHOW and WAIT for user to close
-     * END FUNCTION
+    /*showAlert():
+    PURPOSE: Display alert dialog to user
+    FUNCTION showAlert(type, title, content)
+          1. CREATE Alert with specified type
+          2. SET title and content
+         3. SHOW and WAIT for user to close
      */
     private static void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);

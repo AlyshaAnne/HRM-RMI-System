@@ -271,58 +271,93 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
         }
     }
     
-    /*
-     * PSEUDOCODE - updateEmployeeProfile():
-     * 
-     * PURPOSE: Update employee profile information in database
-     * 
-     * FUNCTION updateEmployeeProfile(employee)
-     *     1. VALIDATE input (employee not null, has employeeId)
-     *     2. PREPARE SQL UPDATE statement
-     *     3. CONNECT to database
-     *     4. SET parameters: firstName, lastName, email, phone, address
-     *     5. SET WHERE condition: employee_id = ?
-     *     6. EXECUTE update
-     *     7. IF rows affected > 0 THEN
-     *        - RETURN true (success)
-     *        ELSE
-     *        - RETURN false (no record updated)
-     * 
-     * CATCH SQLException:
-     *     THROW RemoteException
-     * END FUNCTION
-     */
-    @Override
-    public boolean updateEmployeeProfile(Employee employee) throws RemoteException {
-        // Validation
-        if (employee == null || employee.getEmployeeId() == null) {
-            return false;
-        }
-
-        final String sql = """
-            UPDATE employees 
-            SET first_name = ?, last_name = ?, email = ?, 
-                phone = ?, address = ?
-            WHERE employee_id = ?
-        """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-
-            ps.setString(1, employee.getFirstName());
-            ps.setString(2, employee.getLastName());
-            ps.setString(3, employee.getEmail());
-            ps.setString(4, employee.getPhone());
-            ps.setString(5, employee.getAddress());
-            ps.setString(6, employee.getEmployeeId());
-
-            int rowsAffected = ps.executeUpdate();
-            return rowsAffected > 0;
-
-        } catch (SQLException e) {
-            throw new RemoteException("Failed to update employee profile: " + e.getMessage(), e);
-        }
+/*
+ * PSEUDOCODE - updateEmployeeProfile() with Account Sync:
+ * 
+ * FUNCTION updateEmployeeProfile(employee)
+ *     1. UPDATE employees table (first_name, last_name, etc.)
+ *     2. ALSO UPDATE accounts.full_name to keep in sync
+ *     3. RETURN success/failure
+ * 
+ * WHY THIS IS NEEDED:
+ * - Password reset checks accounts.full_name
+ * - If employee changes name in profile, it must update accounts too
+ * - This keeps both tables synchronized
+ * END FUNCTION
+ */
+@Override
+public boolean updateEmployeeProfile(Employee employee) throws RemoteException {
+    if (employee == null || employee.getEmployeeId() == null) {
+        return false;
     }
+
+    // SQL to update BOTH tables
+    final String updateEmployeeSql = """
+        UPDATE employees 
+        SET first_name = ?, last_name = ?, email = ?, 
+            phone = ?, address = ?
+        WHERE employee_id = ?
+    """;
+    
+    final String updateAccountSql = """
+        UPDATE accounts 
+        SET full_name = ?
+        WHERE employee_id = ?
+    """;
+
+    try (Connection conn = DatabaseConnection.getConnection()) {
+        
+        // Use transaction to update both tables atomically
+        conn.setAutoCommit(false);
+        
+        try {
+            // STEP 1: Update employees table
+            try (PreparedStatement ps = conn.prepareStatement(updateEmployeeSql)) {
+                ps.setString(1, employee.getFirstName());
+                ps.setString(2, employee.getLastName());
+                ps.setString(3, employee.getEmail());
+                ps.setString(4, employee.getPhone());
+                ps.setString(5, employee.getAddress());
+                ps.setString(6, employee.getEmployeeId());
+                
+                int employeeUpdated = ps.executeUpdate();
+                
+                if (employeeUpdated == 0) {
+                    conn.rollback();
+                    return false;
+                }
+            }
+            
+            // STEP 2: Update accounts table with synchronized full name
+            try (PreparedStatement ps = conn.prepareStatement(updateAccountSql)) {
+                String fullName = employee.getFirstName() + " " + employee.getLastName();
+                ps.setString(1, fullName);
+                ps.setString(2, employee.getEmployeeId());
+                ps.executeUpdate();
+            }
+            
+            // Commit both updates
+            conn.commit();
+            System.out.println("Profile updated and account name synchronized for: " + employee.getEmployeeId());
+            
+            // Reload account cache to reflect changes
+            loadAccountsFromDb();
+            
+            return true;
+            
+        } catch (SQLException e) {
+            conn.rollback();
+            throw e;
+        } finally {
+            conn.setAutoCommit(true);
+        }
+
+    } catch (SQLException e) {
+        System.err.println("DB ERROR in updateEmployeeProfile");
+        e.printStackTrace();
+        throw new RemoteException("Failed to update employee profile: " + e.getMessage(), e);
+    }
+}
 
     // ==========================================
     // FAMILY DETAILS METHODS

@@ -17,12 +17,11 @@ import java.rmi.RemoteException;
 import java.time.Year;
 import java.util.List;
 
-/*
- * PSEUDOCODE for LeaveView:
- * 
- * PURPOSE: Manage leave applications and view leave balance
- * 
- * FEATURES:
+import client.cache.ProfileCache;
+
+/*LeaveView:
+ PURPOSE: Manage leave applications and view leave balance
+ FEATURES:
  * 1. Display leave balance for current year
  * 2. Apply for new leave
  * 3. View leave application history
@@ -73,19 +72,6 @@ public class LeaveView {
         applicationsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         applicationsTable.setPlaceholder(new Label("No leave applications yet. Click 'Apply for Leave' to start."));
 
-        /*
-         * PSEUDOCODE - Table Columns:
-         * 
-         * CREATE columns for:
-         * - Leave Type
-         * - Start Date
-         * - End Date
-         * - Days
-         * - Reason
-         * - Status (with color coding)
-         * - Applied Date
-         * - Remarks (HR comments)
-         */
         
         TableColumn<LeaveApplication, String> typeCol = new TableColumn<>("Leave Type");
         typeCol.setCellValueFactory(new PropertyValueFactory<>("leaveTypeName"));
@@ -178,49 +164,43 @@ public class LeaveView {
         );
         root.setPadding(new Insets(25));
 
-        // -----------------------------
         // STEP 6: LOAD DATA
-        // -----------------------------
         loadLeaveBalance(service, loginResult.getEmployeeId());
         loadLeaveApplications(service, loginResult.getEmployeeId());
 
-        // -----------------------------
-        // STEP 7: EVENT HANDLERS
-        // -----------------------------
-
-        /*
-         * PSEUDOCODE - Apply Button:
-         * 
-         * When clicked:
+        /* Apply Button:
+        When clicked:
          * 1. CREATE LeaveApplicationDialog
          * 2. SHOW dialog
          * 3. IF user submitted successfully THEN
-         *    - Refresh both balance and applications
-         */
-        applyBtn.setOnAction(e -> {
-            LeaveApplicationDialog dialog = new LeaveApplicationDialog(service, loginResult.getEmployeeId());
-            dialog.showAndWait().ifPresent(success -> {
-                if (success) {
-                    loadLeaveBalance(service, loginResult.getEmployeeId());
-                    loadLeaveApplications(service, loginResult.getEmployeeId());
-                    showAlert(Alert.AlertType.INFORMATION, "Success",
-                             "✅ Leave application submitted successfully!\n\nYour application is pending HR approval.");
-                }
-            });
-        });
+         *    - Refresh both balance and applications*/
 
-        /*
-         * PSEUDOCODE - Cancel Button:
-         * 
-         * When clicked:
+applyBtn.setOnAction(e -> {
+    LeaveApplicationDialog dialog = new LeaveApplicationDialog(service, loginResult.getEmployeeId());
+    dialog.showAndWait().ifPresent(success -> {
+        if (success) {
+            // Invalidate caches
+            ProfileCache.getInstance().invalidateLeaveBalance(loginResult.getEmployeeId(), Year.now().getValue());
+            ProfileCache.getInstance().invalidateLeaveApplications(loginResult.getEmployeeId());
+            
+            // Reload
+            loadLeaveBalance(service, loginResult.getEmployeeId());
+            loadLeaveApplications(service, loginResult.getEmployeeId());
+            showAlert(Alert.AlertType.INFORMATION, "Success", "Leave application submitted successfully!");
+        }
+    });
+});
+
+        /*Cancel Button:
+        When clicked:
          * 1. GET selected application
          * 2. IF nothing selected THEN show warning
          * 3. IF selected application is not Pending THEN show warning
          * 4. SHOW confirmation dialog
          * 5. IF confirmed THEN
          *    - Call service.cancelLeaveApplication()
-         *    - Refresh data
-         */
+         *    - Refresh data*/
+
         cancelBtn.setOnAction(e -> {
             LeaveApplication selected = applicationsTable.getSelectionModel().getSelectedItem();
             
@@ -255,7 +235,7 @@ public class LeaveView {
                                      "✅ Leave application cancelled successfully.");
                         } else {
                             showAlert(Alert.AlertType.ERROR, "Error",
-                                     "❌ Failed to cancel application. It may have already been processed.");
+                                     "Failed to cancel application. It may have already been processed.");
                         }
                     } catch (RemoteException ex) {
                         showAlert(Alert.AlertType.ERROR, "Connection Error",
@@ -266,25 +246,13 @@ public class LeaveView {
             });
         });
 
-        /*
-         * PSEUDOCODE - Refresh Button:
-         * 
-         * When clicked:
-         * 1. Reload leave balance
-         * 2. Reload leave applications
-         */
+    
         refreshBtn.setOnAction(e -> {
             loadLeaveBalance(service, loginResult.getEmployeeId());
             loadLeaveApplications(service, loginResult.getEmployeeId());
             showAlert(Alert.AlertType.INFORMATION, "Refreshed", "✅ Data refreshed successfully.");
         });
 
-        /*
-         * PSEUDOCODE - Back Button:
-         * 
-         * When clicked:
-         * Return to EmployeeDashboardView
-         */
         backBtn.setOnAction(e -> {
             stage.setScene(EmployeeDashboardView.create(stage, service, loginResult));
         });
@@ -292,16 +260,9 @@ public class LeaveView {
         return new Scene(root, 1000, 700);
     }
 
-    // ==========================================
-    // HELPER METHODS
-    // ==========================================
-
-    /*
-     * PSEUDOCODE - loadLeaveBalance():
-     * 
-     * PURPOSE: Load and display leave balance for current year
-     * 
-     * FUNCTION loadLeaveBalance(service, employeeId)
+    /*loadLeaveBalance():
+     PURPOSE: Load and display leave balance for current year
+     FUNCTION loadLeaveBalance(service, employeeId)
      *     TRY:
      *         1. GET current year
      *         2. CALL service.getLeaveBalance(employeeId, year)
@@ -320,49 +281,59 @@ public class LeaveView {
      *         SHOW error alert
      * END FUNCTION
      */
-    private static void loadLeaveBalance(HRMService service, String employeeId) {
-        try {
-            int currentYear = Year.now().getValue();
-            List<LeaveBalance> balances = service.getLeaveBalance(employeeId, currentYear);
+private static void loadLeaveBalance(HRMService service, String employeeId) {
+    ProfileCache cache = ProfileCache.getInstance();
+    
+    try {
+        int currentYear = Year.now().getValue();
+        
+        // Try cache first
+        List<LeaveBalance> balances = cache.getLeaveBalance(employeeId, currentYear);
+        
+        // If not in cache, fetch from server
+        if (balances == null) {
+            long startTime = System.currentTimeMillis();
+            balances = service.getLeaveBalance(employeeId, currentYear);
+            long duration = System.currentTimeMillis() - startTime;
+            System.out.println("RMI call took: " + duration + "ms");
             
-            balanceContainer.getChildren().clear();
-
-            if (balances != null && !balances.isEmpty()) {
-                HBox cardsRow = new HBox(15);
-                
-                for (LeaveBalance balance : balances) {
-                    VBox card = createBalanceCard(balance);
-                    cardsRow.getChildren().add(card);
-                }
-                
-                balanceContainer.getChildren().add(cardsRow);
-            } else {
-                Label noBalance = new Label("No leave balance found for " + currentYear + ".\nPlease contact HR.");
-                noBalance.setStyle("-fx-text-fill: gray; -fx-font-size: 14px;");
-                balanceContainer.getChildren().add(noBalance);
+            // Store in cache
+            if (balances != null) {
+                cache.putLeaveBalance(employeeId, currentYear, balances);
             }
-
-        } catch (RemoteException ex) {
-            showAlert(Alert.AlertType.ERROR, "Connection Error",
-                     "Failed to load leave balance: " + ex.getMessage());
-            ex.printStackTrace();
         }
-    }
+        
+        balanceContainer.getChildren().clear();
+        
+        if (balances != null && !balances.isEmpty()) {
+            HBox cardsRow = new HBox(15);
+            for (LeaveBalance balance : balances) {
+                VBox card = createBalanceCard(balance);
+                cardsRow.getChildren().add(card);
+            }
+            balanceContainer.getChildren().add(cardsRow);
+        } else {
+            Label noBalance = new Label("No leave balance found for " + currentYear);
+            balanceContainer.getChildren().add(noBalance);
+        }
 
-    /*
-     * PSEUDOCODE - createBalanceCard():
-     * 
-     * PURPOSE: Create a visual card for one leave type balance
-     * 
-     * FUNCTION createBalanceCard(balance)
+    } catch (RemoteException ex) {
+        showAlert(Alert.AlertType.ERROR, "Connection Error",
+                 "Failed to load leave balance: " + ex.getMessage());
+        ex.printStackTrace();
+    }
+}
+
+    /*createBalanceCard():
+     PURPOSE: Create a visual card for one leave type balance
+     FUNCTION createBalanceCard(balance)
      *     1. CREATE VBox container with styling
      *     2. ADD leave type name label
      *     3. ADD remaining days (large, prominent)
      *     4. ADD used/total info
      *     5. ADD color indicator based on remaining days
-     *     6. RETURN card
-     * END FUNCTION
-     */
+     *     6. RETURN card*/
+
     private static VBox createBalanceCard(LeaveBalance balance) {
         VBox card = new VBox(5);
         card.setStyle("-fx-background-color: white; -fx-padding: 15px; " +
@@ -395,12 +366,9 @@ public class LeaveView {
         return card;
     }
 
-    /*
-     * PSEUDOCODE - loadLeaveApplications():
-     * 
-     * PURPOSE: Load and display all leave applications
-     * 
-     * FUNCTION loadLeaveApplications(service, employeeId)
+    /*loadLeaveApplications():
+     PURPOSE: Load and display all leave applications
+     FUNCTION loadLeaveApplications(service, employeeId)
      *     TRY:
      *         1. CALL service.getLeaveApplications(employeeId)
      *         2. CLEAR table
@@ -410,30 +378,40 @@ public class LeaveView {
      *            Table shows placeholder message
      *     
      *     CATCH RemoteException:
-     *         SHOW error alert
-     * END FUNCTION
-     */
-    private static void loadLeaveApplications(HRMService service, String employeeId) {
-        try {
-            List<LeaveApplication> applications = service.getLeaveApplications(employeeId);
+     *         SHOW error alert*/
+
+private static void loadLeaveApplications(HRMService service, String employeeId) {
+    ProfileCache cache = ProfileCache.getInstance();
+    
+    try {
+        // Try cache first
+        List<LeaveApplication> applications = cache.getLeaveApplications(employeeId);
+        
+        // If not in cache, fetch from server
+        if (applications == null) {
+            long startTime = System.currentTimeMillis();
+            applications = service.getLeaveApplications(employeeId);
+            long duration = System.currentTimeMillis() - startTime;
+            System.out.println(" RMI call took: " + duration + "ms");
             
-            applicationsTable.getItems().clear();
-            
-            if (applications != null && !applications.isEmpty()) {
-                applicationsTable.getItems().addAll(applications);
+            // Store in cache
+            if (applications != null) {
+                cache.putLeaveApplications(employeeId, applications);
             }
-
-        } catch (RemoteException ex) {
-            showAlert(Alert.AlertType.ERROR, "Connection Error",
-                     "Failed to load leave applications: " + ex.getMessage());
-            ex.printStackTrace();
         }
-    }
+        
+        applicationsTable.getItems().clear();
+        if (applications != null && !applications.isEmpty()) {
+            applicationsTable.getItems().addAll(applications);
+        }
 
-    /*
-     * PSEUDOCODE - showAlert():
-     * Display alert dialog to user
-     */
+    } catch (RemoteException ex) {
+        showAlert(Alert.AlertType.ERROR, "Connection Error",
+                 "Failed to load leave applications: " + ex.getMessage());
+        ex.printStackTrace();
+    }
+}
+
     private static void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
         alert.setTitle(title);
