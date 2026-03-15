@@ -236,10 +236,23 @@ public class FamilyDetailsView {
                                      "Failed to delete family member. Please try again.");
                         }
                     } catch (RemoteException ex) {
-                        showAlert(Alert.AlertType.ERROR, "Connection Error", 
-                                 "Failed to delete: " + ex.getMessage());
-                        ex.printStackTrace();
-                    }
+                // LOG TECHNICAL DETAILS TO CONSOLE
+                System.err.println("NETWORK ERROR: Failed to delete family member");
+                System.err.println("Member ID: " + selected.getId());
+                System.err.println("Error Type: " + ex.getClass().getSimpleName());
+                System.err.println("Error Message: " + ex.getMessage());
+                ex.printStackTrace();
+                
+                // SHOW USER-FRIENDLY MESSAGE
+                showAlert(Alert.AlertType.ERROR, 
+                         "Connection Error",
+                         "Unable to delete family member.\n\n" +
+                         "The deletion was NOT completed.\n\n" +
+                         "Please check:\n" +
+                         "• Server is running\n" +
+                         "• Network connection is stable\n" +
+                         "• Try again in a few moments");
+            }
                 }
             });
         });
@@ -304,10 +317,22 @@ public class FamilyDetailsView {
             }
 
         } catch (RemoteException ex) {
-            showAlert(Alert.AlertType.ERROR, "Connection Error",
-                     "Failed to load family details: " + ex.getMessage());
-            ex.printStackTrace();
-        }
+        // LOG TECHNICAL DETAILS TO CONSOLE
+        System.err.println("NETWORK ERROR: Failed to load family details");
+        System.err.println("Employee ID: " + employeeId);
+        System.err.println("Error Type: " + ex.getClass().getSimpleName());
+        System.err.println("Error Message: " + ex.getMessage());
+        ex.printStackTrace();
+        
+        // SHOW USER-FRIENDLY MESSAGE
+        showAlert(Alert.AlertType.ERROR, 
+                 "Connection Error",
+                 "Unable to load family details from server.\n\n" +
+                 "Please check:\n" +
+                 "• Server is running\n" +
+                 "• Network connection is stable\n" +
+                 "• Contact IT support if problem persists");
+    }
     }
 
     /*showAlert():

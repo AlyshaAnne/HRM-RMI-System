@@ -232,7 +232,7 @@ applyBtn.setOnAction(e -> {
                         if (success) {
                             applicationsTable.getItems().remove(selected);
                             showAlert(Alert.AlertType.INFORMATION, "Success",
-                                     "✅ Leave application cancelled successfully.");
+                                     "Leave application cancelled successfully.");
                         } else {
                             showAlert(Alert.AlertType.ERROR, "Error",
                                      "Failed to cancel application. It may have already been processed.");
@@ -250,7 +250,7 @@ applyBtn.setOnAction(e -> {
         refreshBtn.setOnAction(e -> {
             loadLeaveBalance(service, loginResult.getEmployeeId());
             loadLeaveApplications(service, loginResult.getEmployeeId());
-            showAlert(Alert.AlertType.INFORMATION, "Refreshed", "✅ Data refreshed successfully.");
+            showAlert(Alert.AlertType.INFORMATION, "Refreshed", "Data refreshed successfully.");
         });
 
         backBtn.setOnAction(e -> {
@@ -318,10 +318,23 @@ private static void loadLeaveBalance(HRMService service, String employeeId) {
         }
 
     } catch (RemoteException ex) {
-        showAlert(Alert.AlertType.ERROR, "Connection Error",
-                 "Failed to load leave balance: " + ex.getMessage());
-        ex.printStackTrace();
-    }
+    // 1. LOG TECHNICAL DETAILS (for developers/debugging)
+    System.err.println("NETWORK ERROR");
+    System.err.println("Context: Loading Leave Balance");
+    System.err.println("Error Type: " + ex.getClass().getSimpleName());
+    System.err.println("Error Message: " + ex.getMessage());
+    ex.printStackTrace();  
+    
+    // 2. SHOW USER-FRIENDLY MESSAGE
+    showAlert(Alert.AlertType.ERROR, 
+             "Connection Error", 
+             "Unable to load leave balance from server.\n\n" +   
+             "Please check:\n" +  
+             "• Server is running\n" +
+             "• Network connection is stable\n" +
+             "• Contact IT support if problem persists");  
+}
+
 }
 
     /*createBalanceCard():
@@ -406,10 +419,22 @@ private static void loadLeaveApplications(HRMService service, String employeeId)
         }
 
     } catch (RemoteException ex) {
-        showAlert(Alert.AlertType.ERROR, "Connection Error",
-                 "Failed to load leave applications: " + ex.getMessage());
-        ex.printStackTrace();
-    }
+    // 1. LOG TECHNICAL DETAILS (for developers/debugging)
+    System.err.println("NETWORK ERROR");
+    System.err.println("Context: Loading Leave Application");
+    System.err.println("Error Type: " + ex.getClass().getSimpleName());
+    System.err.println("Error Message: " + ex.getMessage());
+    ex.printStackTrace();  
+    
+    // 2. SHOW USER-FRIENDLY MESSAGE
+    showAlert(Alert.AlertType.ERROR, 
+             "Connection Error",  
+             "Unable to load details from server.\n\n" +  
+             "Please check:\n" +  
+             "• Server is running\n" +
+             "• Network connection is stable\n" +
+             "• Contact IT support if problem persists");  
+}
 }
 
     private static void showAlert(Alert.AlertType type, String title, String content) {

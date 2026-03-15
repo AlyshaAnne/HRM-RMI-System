@@ -275,9 +275,21 @@ private static void loadEmployeeData(HRMService service, String employeeId,
         }
 
     } catch (RemoteException ex) {
-        showAlert(Alert.AlertType.ERROR, "Connection Error",
-                 "Failed to load employee data: " + ex.getMessage());
+        // LOG TECHNICAL DETAILS TO CONSOLE (for debugging)
+        System.err.println("NETWORK ERROR: Failed to load employee data");
+        System.err.println("Employee ID: " + employeeId);
+        System.err.println("Error Type: " + ex.getClass().getSimpleName());
+        System.err.println("Error Message: " + ex.getMessage());
         ex.printStackTrace();
+        
+        // SHOW USER-FRIENDLY MESSAGE
+        showAlert(Alert.AlertType.ERROR, 
+                 "Connection Error",
+                 "Unable to connect to the server.\n\n" +
+                 "Please check:\n" +
+                 "• Server is running\n" +
+                 "• Network connection is stable\n" +
+                 "• Contact IT support if problem persists");
     }
 }
 
@@ -380,11 +392,24 @@ private static void loadEmployeeData(HRMService service, String employeeId,
             }
             
         } catch (RemoteException ex) {
-            // Handle network/RMI errors
-            showAlert(Alert.AlertType.ERROR, "Connection Error", 
-                     "Failed to save profile: " + ex.getMessage());
-            ex.printStackTrace();
-        }
+        // LOG TECHNICAL DETAILS TO CONSOLE (for debugging)
+        System.err.println("NETWORK ERROR: Failed to save profile");
+        System.err.println("Employee ID: " + employeeId);
+        System.err.println("Error Type: " + ex.getClass().getSimpleName());
+        System.err.println("Error Message: " + ex.getMessage());
+        ex.printStackTrace();
+        
+        // SHOW USER-FRIENDLY MESSAGE 
+        showAlert(Alert.AlertType.ERROR, 
+                 "Connection Error",
+                 "Unable to save changes to the server.\n\n" +
+                 "Your changes were NOT saved.\n\n" +
+                 "Please check:\n" +
+                 "• Server is running\n" +
+                 "• Network connection is stable\n" +
+                 "• Try again in a few moments\n\n" +
+                 "Contact IT support if problem persists.");
+    }
     }
 
 
