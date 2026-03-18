@@ -1475,4 +1475,97 @@ public class HRMServiceImpl extends UnicastRemoteObject implements HRMService {
         }
     }
 
+    @Override
+    public List<LeaveApplication> getAllPendingLeaveApplications() throws RemoteException {
+        final String sql = """
+                    SELECT la.id, la.employee_id, la.leave_type_id, lt.leave_type_name,
+                           la.start_date, la.end_date, la.num_days, la.reason, la.status,
+                           la.applied_date, la.reviewed_by, la.reviewed_date, la.remarks
+                    FROM leave_applications la
+                    JOIN leave_types lt ON la.leave_type_id = lt.id
+                    WHERE UPPER(la.status) = 'PENDING'
+                    ORDER BY la.applied_date DESC
+                """;
+
+        List<LeaveApplication> applications = new ArrayList<>();
+
+        try (Connection conn = DatabaseConnection.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                LeaveApplication app = new LeaveApplication();
+                app.setId(rs.getInt("id"));
+                app.setEmployeeId(rs.getString("employee_id"));
+                app.setLeaveTypeId(rs.getInt("leave_type_id"));
+                app.setLeaveTypeName(rs.getString("leave_type_name"));
+
+                Date startDate = rs.getDate("start_date");
+                app.setStartDate(startDate != null ? startDate.toString() : "");
+
+                Date endDate = rs.getDate("end_date");
+                app.setEndDate(endDate != null ? endDate.toString() : "");
+
+                app.setNumDays(rs.getInt("num_days"));
+                app.setReason(rs.getString("reason"));
+                app.setStatus(rs.getString("status"));
+
+                Timestamp appliedDate = rs.getTimestamp("applied_date");
+                app.setAppliedDate(appliedDate != null ? appliedDate.toString() : "");
+
+                app.setReviewedBy(rs.getString("reviewed_by"));
+
+                Timestamp reviewedDate = rs.getTimestamp("reviewed_date");
+                app.setReviewedDate(reviewedDate != null ? reviewedDate.toString() : "");
+
+                app.setRemarks(rs.getString("remarks"));
+
+                applications.add(app);
+            }
+
+            return applications;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            throw new RemoteException("Failed to get pending leave applications: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public boolean updateLeaveApplicationStatus(int applicationId, String newStatus) throws RemoteException {
+        if (newStatus == null) {
+            return false;
+        }
+
+        String status = newStatus.trim();
+
+        if (!(status.equalsIgnoreCase("APPROVED") || status.equalsIgnoreCase("REJECTED"))) {
+            return false;
+        }
+
+        final String sql = """
+                    UPDATE leave_applications
+                    SET status = ?, reviewed_date = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """;
+
+        try (Connection conn = DatabaseConnection.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            if (status.equalsIgnoreCase("APPROVED")) {
+                ps.setString(1, "Approved");
+            } else {
+                ps.setString(1, "Rejected");
+            }
+
+            ps.setInt(2, applicationId);
+
+            return ps.executeUpdate() > 0;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            throw new RemoteException("Failed to update leave application status: " + e.getMessage(), e);
+        }
+    }
+
 }

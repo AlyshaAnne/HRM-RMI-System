@@ -200,4 +200,17 @@ public interface HRMService extends Remote {
      * Cancel a pending leave application
      */
     boolean cancelLeaveApplication(int applicationId) throws RemoteException;
+
+    /*
+     * PSEUDOCODE - getAllPendingLeaveApplications():
+     * HR views all pending leave applications
+     */
+    List<LeaveApplication> getAllPendingLeaveApplications() throws RemoteException;
+
+    /*
+     * PSEUDOCODE - updateLeaveApplicationStatus():
+     * HR approves or rejects a leave application
+     */
+    boolean updateLeaveApplicationStatus(int applicationId, String newStatus) throws RemoteException;
+
 }

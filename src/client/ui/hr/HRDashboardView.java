@@ -23,6 +23,7 @@ public class HRDashboardView extends VBox {
         Button monthlyReportBtn = new Button("View Monthly Report");
         Button yearlyReportBtn = new Button("View Yearly Report");
         Button manageAccountsBtn = new Button("Manage Accounts");
+        Button approveLeaveBtn = new Button("Approve / Reject Leave");
 
         getChildren().addAll(
                 registerEmployeeBtn,
@@ -31,6 +32,7 @@ public class HRDashboardView extends VBox {
                 viewProfileBtn,
                 viewFamilyBtn,
                 viewLeaveHistoryBtn,
+                approveLeaveBtn,
                 monthlyReportBtn,
                 yearlyReportBtn,
                 resetRequestsBtn,
@@ -75,6 +77,10 @@ public class HRDashboardView extends VBox {
 
         manageAccountsBtn.setOnAction(e -> {
             stage.setScene(new Scene(new ManageAccountsView(stage, service), 900, 550));
+        });
+
+        approveLeaveBtn.setOnAction(e -> {
+            stage.setScene(new Scene(new LeaveApprovalView(stage, service), 1100, 600));
         });
 
     }
